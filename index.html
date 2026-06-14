@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="APP">
   <title>蒋的APP</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -30,28 +36,41 @@
   </div>
 
   <nav id="bottom-nav" class="bottom-nav" style="display:none;">
-    <button class="nav-item active" data-page="home">
-      <span class="nav-icon">🏠</span><span class="nav-label">主页</span>
+    <button class="nav-item active" data-page="me">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 12a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4Z"/><path d="M4.8 20.2c1.2-3.4 3.7-5.1 7.2-5.1s6 1.7 7.2 5.1"/></svg>
+      </span><span class="nav-label">我</span>
     </button>
-    <button class="nav-item" data-page="friends">
-      <span class="nav-icon">👥</span><span class="nav-label">好友</span>
+    <button class="nav-item" data-page="home">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M11 4.2 5.2 14h5.1l-1.1 5.8 9.6-11.7h-5.3l1.3-3.9H11Z"/></svg>
+      </span><span class="nav-label">探索</span>
     </button>
-    <button class="nav-item" data-page="gacha">
-      <span class="nav-icon">🎰</span><span class="nav-label">抽卡</span>
-    </button>
-    <button class="nav-item" data-page="collection">
-      <span class="nav-icon">📦</span><span class="nav-label">收藏</span>
-    </button>
-    <button class="nav-item" data-page="message">
-      <span class="nav-icon">💬</span><span class="nav-label">留言</span>
+    <button class="nav-item" data-page="pursuit">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3.8v3.1"/><path d="M12 17.1v3.1"/><path d="M20.2 12h-3.1"/><path d="M6.9 12H3.8"/><path d="m17.8 6.2-2.2 2.2"/><path d="m8.4 15.6-2.2 2.2"/><path d="m17.8 17.8-2.2-2.2"/><path d="m8.4 8.4-2.2-2.2"/><circle cx="12" cy="12" r="3.4"/></svg>
+      </span><span class="nav-label">追求</span>
     </button>
   </nav>
 
   <div id="page-home" class="page">
+    <h1>探索</h1>
+    <p class="gacha-desc">发现和管理你的卡牌资产</p>
+    <div class="entry-list">
+      <button class="entry-item" data-open-page="gacha"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>
+      <button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>查看我的卡牌</small></button>
+      <button class="entry-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>
+      <button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><small>好友与关系</small></button>
+    </div>
+    <div class="section-title">最近收藏</div>
+    <div id="home-recent-cards" class="card-list"></div>
+  </div>
+
+  <div id="page-me" class="page">
     <div class="profile-card">
-      <div id="home-avatar" class="profile-avatar"></div>
-      <h2 id="home-name"></h2>
-      <p class="user-id">ID: <span id="home-id"></span></p>
+      <div id="me-avatar" class="profile-avatar"></div>
+      <h2 id="me-name"></h2>
+      <p class="user-id">ID: <span id="me-id"></span></p>
       <div class="stats-row">
         <div class="stat-item">
           <span class="stat-num" id="stat-collection">0</span>
@@ -63,12 +82,35 @@
         </div>
       </div>
     </div>
-    <div class="section-title">最近收藏</div>
-    <div id="home-recent-cards" class="card-list"></div>
+    <div class="menu-list">
+      <button class="menu-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><b>›</b></button>
+      <button class="menu-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><b>›</b></button>
+      <button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板（朋友圈）</span><b>›</b></button>
+      <button class="menu-item" data-open-page="collection"><span><i class="flat-icon icon-work"></i>卡牌作品</span><b>›</b></button>
+      <button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-face"></i>表情</span><b>›</b></button>
+      <button class="menu-item" data-open-page="pursuit"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>
+    </div>
+  </div>
+
+  <div id="page-pursuit" class="page">
+    <h1>追求</h1>
+    <p class="gacha-desc">当前仅开放设置</p>
+    <div class="menu-list">
+      <button class="menu-item" id="btn-show-admin"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>
+    </div>
+    <div id="admin-panel" class="debug-panel" style="display:none;">
+      <div class="section-title">管理员</div>
+      <div class="add-friend-form">
+        <input type="password" id="admin-password-input" placeholder="输入管理员密码">
+        <button id="btn-admin-login" class="btn-small">开启</button>
+      </div>
+      <div id="admin-status" class="gacha-desc">ADMIN_MODE: OFF</div>
+      <div id="debug-panel" class="debug-panel-inner" style="display:none;"></div>
+    </div>
   </div>
 
   <div id="page-friends" class="page">
-    <h1>👥 好友</h1>
+    <h1>好友</h1>
     <div class="add-friend-form">
       <input type="text" id="friend-id-input" placeholder="输入好友 user_id">
       <button id="btn-add-friend" class="btn-small">添加</button>
@@ -77,7 +119,7 @@
   </div>
 
   <div id="page-gacha" class="page">
-    <h1>🎰 抽卡</h1>
+    <h1>抽卡</h1>
     <p class="gacha-desc">点击下方按钮抽取随机卡牌</p>
     <p class="gacha-remain" id="gacha-remain">今日抽卡: 0/3</p>
     <div class="gacha-area">
@@ -89,12 +131,19 @@
   </div>
 
   <div id="page-collection" class="page">
-    <h1>📦 我的收藏</h1>
+    <h1>我的收藏</h1>
+    <div class="trade-claim-box">
+      <div class="section-title">领取卡牌</div>
+      <div class="add-friend-form">
+        <input type="text" id="trade-code-input" placeholder="输入交易码领取卡牌" autocomplete="off">
+        <button id="btn-claim-trade" class="btn-small">领取</button>
+      </div>
+    </div>
     <div id="collection-list" class="card-list"></div>
   </div>
 
   <div id="page-message" class="page">
-    <h1>💬 留言板</h1>
+    <h1>留言板</h1>
     <p class="gacha-desc" id="msg">点击按钮进入留言板</p>
     <button id="myBtn" class="btn-primary">进入留言板</button>
     <div id="inputArea" style="display:none;">

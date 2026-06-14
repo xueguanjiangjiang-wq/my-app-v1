@@ -1,30 +1,98 @@
-// ============================================================
-// 蒋的APP - 三层数据结构重构
+﻿// ============================================================
+// 钂嬬殑APP - 涓夊眰鏁版嵁缁撴瀯閲嶆瀯
 // User Core / Social Layer / Asset Layer
 // ============================================================
 
 (function() {
   'use strict';
 
-  const SUPABASE_URL = 'https://rzrachgwnmkbeafhktse.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_lzY69nQuBXB05sufZI5cAg_U_5xBhsf';
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  const DAILY_GACHA_LIMIT = 3;
-  const SESSION_USER_ID_KEY = 'cardapp_current_user_id';
-
-  const appState = {
-    user: null,
-    selectedAvatar: '😀',
-    isDrawing: false
+  window.onerror = function(message, source, lineno, colno, error) {
+    console.error('Global error:', message, source, lineno, colno, error);
+    recoverFromFatalError();
+    return true;
   };
 
-  function sb(promise) {
-    return new Promise(function(resolve, reject) {
-      promise.then(function(res) {
-        if (res.error) reject(res.error);
-        else resolve(res);
-      }).catch(reject);
+  window.onunhandledrejection = function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+    recoverFromFatalError();
+  };
+
+  var SUPABASE_URL = 'https://rzrachgwnmkbeafhktse.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_lzY69nQuBXB05sufZI5cAg_U_5xBhsf';
+  var supabase = window.supabase && window.supabase.createClient ?
+    window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) :
+    null;
+  var ADMIN_PASSWORD = 'xxx';
+  var DAILY_GACHA_LIMIT = 3;
+  var SESSION_USER_ID_KEY = 'cardapp_current_user_id';
+  var SUPABASE_RETRY_LIMIT = 2;
+
+  var appState = {
+    user: null,
+    selectedAvatar: '😀',
+    isDrawing: false,
+    adminMode: false
+  };
+
+  function recoverFromFatalError() {
+    var run = function() {
+      hideLoading();
+      var hasActivePage = document.querySelector('.page.active');
+      if (!hasActivePage) showLoginPage();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function onReady() {
+        document.removeEventListener('DOMContentLoaded', onReady);
+        run();
+      });
+    } else {
+      run();
+    }
+  }
+
+  function delay(ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, ms);
     });
+  }
+
+  function shouldRetrySupabaseError(err) {
+    if (!err) return true;
+    var msg = getErrorMessage(err).toLowerCase();
+    return msg.indexOf('network') !== -1 ||
+      msg.indexOf('fetch') !== -1 ||
+      msg.indexOf('timeout') !== -1 ||
+      msg.indexOf('failed to fetch') !== -1 ||
+      msg.indexOf('load failed') !== -1 ||
+      msg.indexOf('temporarily') !== -1 ||
+      msg.indexOf('rate limit') !== -1;
+  }
+
+  function sb(requestFactory, retryLimit) {
+    var maxRetries = retryLimit == null ? SUPABASE_RETRY_LIMIT : retryLimit;
+    var attempt = 0;
+
+    function run() {
+      var request;
+      try {
+        request = typeof requestFactory === 'function' ? requestFactory() : requestFactory;
+      } catch (err) {
+        return Promise.reject(err);
+      }
+
+      return Promise.resolve(request).then(function(res) {
+        if (res && res.error) throw res.error;
+        return res;
+      }).catch(function(err) {
+        if (attempt < maxRetries && shouldRetrySupabaseError(err)) {
+          attempt += 1;
+          return delay(300 * attempt).then(run);
+        }
+        throw err;
+      });
+    }
+
+    return run();
   }
 
   function requireUserId() {
@@ -38,12 +106,14 @@
   }
 
   function isMissingUserError(err) {
-    const msg = getErrorMessage(err);
-    return msg.indexOf('cards_user_id_fkey') !== -1 || msg.indexOf('foreign key constraint') !== -1;
+    var msg = getErrorMessage(err);
+    return msg.indexOf('cards_user_id_fkey') !== -1 ||
+      msg.indexOf('cards_owner_id_fkey') !== -1 ||
+      msg.indexOf('foreign key constraint') !== -1;
   }
 
   function showToast(msg) {
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.className = 'toast';
     el.textContent = msg;
     document.body.appendChild(el);
@@ -58,16 +128,21 @@
 
   function formatDate(d) {
     if (!d) return '';
-    const dt = new Date(d);
+    var dt = new Date(d);
     return dt.getFullYear() + '-' +
-      String(dt.getMonth() + 1).padStart(2, '0') + '-' +
-      String(dt.getDate()).padStart(2, '0') + ' ' +
-      String(dt.getHours()).padStart(2, '0') + ':' +
-      String(dt.getMinutes()).padStart(2, '0');
+      pad2(dt.getMonth() + 1) + '-' +
+      pad2(dt.getDate()) + ' ' +
+      pad2(dt.getHours()) + ':' +
+      pad2(dt.getMinutes());
+  }
+
+  function pad2(value) {
+    value = String(value);
+    return value.length < 2 ? '0' + value : value;
   }
 
   function hideLoading() {
-    const overlay = document.getElementById('loading-overlay');
+    var overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.add('hidden');
   }
 
@@ -75,7 +150,7 @@
     document.querySelectorAll('.page').forEach(function(page) {
       page.classList.remove('active');
     });
-    const target = document.getElementById('page-' + name);
+    var target = document.getElementById('page-' + name);
     if (target) target.classList.add('active');
     document.querySelectorAll('.nav-item').forEach(function(button) {
       button.classList.toggle('active', button.getAttribute('data-page') === name);
@@ -83,13 +158,13 @@
   }
 
   function showLoginPage() {
-    const nav = document.getElementById('bottom-nav');
+    var nav = document.getElementById('bottom-nav');
     if (nav) nav.style.display = 'none';
     showPage('login');
   }
 
   function showAppPage(name) {
-    const nav = document.getElementById('bottom-nav');
+    var nav = document.getElementById('bottom-nav');
     if (nav) nav.style.display = 'flex';
     document.getElementById('page-login').classList.remove('active');
     showPage(name);
@@ -112,87 +187,147 @@
     showToast('当前用户不存在，请重新登录或注册');
   }
 
-  const UserCore = {
+  var UserCore = {
     getById: function(userId) {
-      return sb(supabase.from('users').select('*').eq('id', userId).limit(1)).then(function(res) {
+      return sb(function() { return supabase.from('users').select('*').eq('id', userId).limit(1); }).then(function(res) {
         return res.data && res.data.length ? res.data[0] : null;
       });
     },
     getByName: function(name) {
-      return sb(supabase.from('users').select('*').eq('name', name).limit(1)).then(function(res) {
+      return sb(function() { return supabase.from('users').select('*').eq('name', name).limit(1); }).then(function(res) {
         return res.data && res.data.length ? res.data[0] : null;
       });
     },
     create: function(name, avatar) {
-      return sb(supabase.from('users').insert({
+      return sb(function() { return supabase.from('users').insert({
         id: generateUserId(),
         name: name,
         avatar: avatar,
         gacha_remaining: DAILY_GACHA_LIMIT
-      }).select('*').single()).then(function(res) {
+      }).select('*').single(); }).then(function(res) {
         return res.data;
       });
     },
     getGachaRemaining: function(userId) {
-      return sb(supabase.from('users').select('gacha_remaining').eq('id', userId).single()).then(function(res) {
+      return sb(function() { return supabase.from('users').select('gacha_remaining').eq('id', userId).single(); }).then(function(res) {
         return res.data.gacha_remaining;
       });
     },
     setGachaRemaining: function(userId, nextRemaining) {
-      return sb(supabase.from('users').update({
+      return sb(function() { return supabase.from('users').update({
         gacha_remaining: nextRemaining
-      }).eq('id', userId).select('*').single()).then(function(res) {
+      }).eq('id', userId).select('*').single(); }).then(function(res) {
         appState.user = res.data;
         return res.data.gacha_remaining;
       });
     }
   };
 
-  const SocialLayer = {
+  var SocialLayer = {
     listFriends: function(userId) {
-      return sb(supabase.from('friends').select('*').eq('user_id', userId));
+      return sb(function() { return supabase.from('friends').select('*').eq('user_id', userId); });
     },
     addFriend: function(userId, friendId) {
-      return sb(supabase.from('friends').insert({ user_id: userId, friend_id: friendId }));
+      return sb(function() { return supabase.from('friends').insert({ user_id: userId, friend_id: friendId }); });
     },
     removeFriend: function(userId, friendId) {
-      return sb(supabase.from('friends').delete().match({ user_id: userId, friend_id: friendId }));
+      return sb(function() { return supabase.from('friends').delete().match({ user_id: userId, friend_id: friendId }); });
     },
     listMessages: function(userId) {
-      return sb(supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true }));
+      return sb(function() { return supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true }); });
     },
     createMessage: function(userId, type, content) {
-      return sb(supabase.from('messages').insert({ type: type, content: content, user_id: userId }));
+      return sb(function() { return supabase.from('messages').insert({ type: type, content: content, user_id: userId }); });
     },
     deleteMessage: function(userId, id) {
-      return sb(supabase.from('messages').delete().match({ id: id, user_id: userId }));
+      return sb(function() { return supabase.from('messages').delete().match({ id: id, user_id: userId }); });
+    },
+    listAllMessages: function() {
+      return sb(function() { return supabase.from('messages').select('*').order('created_at', { ascending: true }); });
+    },
+    deleteAnyMessage: function(id) {
+      return sb(function() { return supabase.from('messages').delete().match({ id: id }); });
     }
   };
 
-  const AssetLayer = {
+  var AssetLayer = {
     listCards: function(userId) {
-      return sb(supabase.from('cards').select('*').eq('user_id', userId).order('created_at', { ascending: false }));
+      return sb(function() { return supabase.from('cards').select('*').eq('owner_id', userId).order('created_at', { ascending: false }); });
+    },
+    getCardById: function(cardId) {
+      return sb(function() { return supabase.from('cards').select('*').eq('id', cardId).limit(1); });
     },
     recentCards: function(userId) {
-      return sb(supabase.from('cards').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(3));
+      return sb(function() { return supabase.from('cards').select('*').eq('owner_id', userId).order('created_at', { ascending: false }).limit(3); });
     },
     createCard: function(userId, card) {
-      return sb(supabase.from('cards').insert({ user_id: userId, name: card.name, rarity: card.rarity, image: null }));
+      return sb(function() {
+        return supabase.from('cards').insert({
+          user_id: userId,
+          owner_id: userId,
+          name: card.name,
+          rarity: card.rarity,
+          image: card.image,
+          trade_count: 0
+        }).select('*').single();
+      });
     },
     deleteCard: function(userId, id) {
-      return sb(supabase.from('cards').delete().match({ id: id, user_id: userId }));
+      return sb(function() { return supabase.from('cards').delete().match({ id: id, owner_id: userId }); });
+    },
+    transferCard: function(cardId, ownerId) {
+      return sb(function() {
+        return supabase.from('cards').update({
+          owner_id: ownerId,
+          trade_count: 1
+        }).eq('id', cardId).select('*').single();
+      });
     }
   };
 
-  const AVATARS = ['😀','😎','🤩','🥳','😺','🐱','🦊','🐼','🐨','🦁','🐯','🐸','🌟','⚡','🔥','💎'];
-  const RARITY_POOL = [
-    { rarity: 'N', weight: 50 },
-    { rarity: 'R', weight: 30 },
-    { rarity: 'SR', weight: 14 },
-    { rarity: 'SSR', weight: 5 },
+  var TradeLayer = {
+    createTrade: function(cardId, fromUser, tradeCode) {
+      return sb(function() {
+        return supabase.from('trades').insert({
+          card_id: cardId,
+          from_user: fromUser,
+          to_user: null,
+          trade_code: tradeCode,
+          used: false
+        }).select('*').single();
+      }, 0);
+    },
+    getByCode: function(tradeCode) {
+      return sb(function() {
+        return supabase.from('trades').select('*').eq('trade_code', tradeCode).limit(1);
+      });
+    },
+    markUsed: function(tradeId, toUser) {
+      return sb(function() {
+        return supabase.from('trades').update({
+          used: true,
+          to_user: toUser
+        }).eq('id', tradeId).select('*').single();
+      });
+    }
+  };
+
+  var AVATARS = ['😀','😎','🤩','🥳','😺','🐱','🦊','🐼','🐨','🦁','🐯','🐸','🌟','⚡','🔥','💎'];
+  var RARITY_POOL = [
+    { rarity: 'N', weight: 60 },
+    { rarity: 'R', weight: 25 },
+    { rarity: 'SR', weight: 10 },
+    { rarity: 'SSR', weight: 4 },
     { rarity: 'UR', weight: 1 }
   ];
-  const CARD_NAMES = {
+  var CARD_IMAGES = {
+    N: '/icon-192.png',
+    R: '/icon-192.png',
+    SR: '/icon-192.png',
+    SSR: '/icon-512.png',
+    UR: '/icon-512.png'
+  };
+  var CARD_NAMES = {
     N: ['星星','月亮','花朵','树叶','小溪','微风','白云','小鸟','小鱼','小草','露珠','彩虹','蝴蝶','蜜蜂','蜗牛','蘑菇'],
     R: ['火焰','冰霜','雷电','风暴','陨石','极光','火山','闪电'],
     SR: ['凤凰','麒麟','白龙','金乌','鲲鹏','玄武','青龙','饕餮'],
@@ -201,11 +336,11 @@
   };
 
   function renderAvatarPicker() {
-    const grid = document.getElementById('avatar-grid');
+    var grid = document.getElementById('avatar-grid');
     if (!grid) return;
     grid.innerHTML = '';
     AVATARS.forEach(function(avatar, index) {
-      const el = document.createElement('div');
+      var el = document.createElement('div');
       el.className = 'avatar-option' + (index === 0 ? ' selected' : '');
       el.textContent = avatar;
       el.onclick = function() {
@@ -220,7 +355,7 @@
   }
 
   function restoreSession() {
-    const userId = localStorage.getItem(SESSION_USER_ID_KEY);
+    var userId = localStorage.getItem(SESSION_USER_ID_KEY);
     if (!userId) return Promise.resolve(null);
     return UserCore.getById(userId).then(function(user) {
       if (!user) clearCurrentUser();
@@ -241,14 +376,14 @@
 
   function enterApp(user, message) {
     setCurrentUser(user);
-    showAppPage('home');
+    showAppPage('me');
     updateHome();
     showToast(message);
   }
 
   function login() {
-    const nameInput = document.getElementById('login-name');
-    const name = nameInput.value.trim();
+    var nameInput = document.getElementById('login-name');
+    var name = nameInput.value.trim();
     if (!name) {
       showToast('请输入名字');
       return;
@@ -272,10 +407,11 @@
 
   function updateHome() {
     if (!appState.user) return;
-    const userId = requireUserId();
-    document.getElementById('home-avatar').textContent = appState.user.avatar || '😀';
-    document.getElementById('home-name').textContent = appState.user.name;
-    document.getElementById('home-id').textContent = userId;
+    var userId = requireUserId();
+    setText('me-avatar', appState.user.avatar || '😀');
+    setText('me-name', appState.user.name);
+    setText('me-id', userId);
+    updateAdminStatus();
 
     AssetLayer.listCards(userId).then(function(res) {
       document.getElementById('stat-collection').textContent = (res.data || []).length;
@@ -290,7 +426,7 @@
     });
 
     AssetLayer.recentCards(userId).then(function(res) {
-      const container = document.getElementById('home-recent-cards');
+      var container = document.getElementById('home-recent-cards');
       container.innerHTML = '';
       if (!res.data || !res.data.length) {
         container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
@@ -304,23 +440,116 @@
     });
   }
 
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
   function createCardItem(card) {
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.className = 'card-item';
-    el.innerHTML = '<div class="card-rarity rarity-' + card.rarity + '">' + card.rarity + '</div><span class="card-name">' + (card.name || '') + '</span><span class="card-time">' + formatDate(card.created_at) + '</span>';
+    var ownerId = card.owner_id || card.user_id || '';
+    var image = card.image || CARD_IMAGES[card.rarity] || '/icon-192.png';
+    el.innerHTML =
+      '<img class="card-asset-image" src="' + image + '" alt="' + (card.name || 'card') + '">' +
+      '<div class="card-rarity rarity-' + card.rarity + '">' + card.rarity + '</div>' +
+      '<div class="card-asset-info">' +
+      '<span class="card-name">' + (card.name || '') + '</span>' +
+      '<span class="card-owner">归属: ' + ownerId + '</span>' +
+      '<span class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</span>' +
+      '</div>' +
+      '<span class="card-time">' + formatDate(card.created_at) + '</span>';
     return el;
   }
 
+  function generateTradeCode() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var code = '';
+    for (var i = 0; i < 6; i += 1) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return 'TRADE-' + code;
+  }
+
+  function createTradeCodeForCard(card, attempt) {
+    var userId = requireUserId();
+    if (card.trade_count >= 1) {
+      showToast('已交易卡不能再次生成 code');
+      return;
+    }
+    if ((card.owner_id || card.user_id) !== userId) {
+      showToast('只能交易自己的卡牌');
+      return;
+    }
+    var tradeCode = generateTradeCode();
+    TradeLayer.createTrade(card.id, userId, tradeCode).then(function() {
+      showToast('交易码: ' + tradeCode);
+      if (window.prompt) window.prompt('交易码已生成，请复制', tradeCode);
+    }).catch(function(err) {
+      var tryCount = attempt || 0;
+      if (tryCount < 2 && getErrorMessage(err).toLowerCase().indexOf('duplicate') !== -1) {
+        createTradeCodeForCard(card, tryCount + 1);
+        return;
+      }
+      console.error('生成交易码失败:', err);
+      showToast('生成交易码失败: ' + getErrorMessage(err));
+    });
+  }
+
+  function claimTradeCode() {
+    if (!appState.user) {
+      showToast('请先登录');
+      return;
+    }
+    var input = document.getElementById('trade-code-input');
+    var code = input ? input.value.trim().toUpperCase() : '';
+    if (!code) {
+      showToast('请输入交易码');
+      return;
+    }
+    var userId = requireUserId();
+    TradeLayer.getByCode(code).then(function(res) {
+      var trade = res.data && res.data.length ? res.data[0] : null;
+      if (!trade) {
+        showToast('交易码不存在');
+        return null;
+      }
+      if (trade.used) {
+        showToast('已失效');
+        return null;
+      }
+      return AssetLayer.getCardById(trade.card_id).then(function(cardRes) {
+        var card = cardRes.data && cardRes.data.length ? cardRes.data[0] : null;
+        if (!card || Number(card.trade_count || 0) >= 1) {
+          showToast('已失效');
+          return null;
+        }
+        return AssetLayer.transferCard(trade.card_id, userId).then(function() {
+          return TradeLayer.markUsed(trade.id, userId);
+        });
+      });
+    }).then(function(result) {
+      if (!result) return;
+      if (input) input.value = '';
+      showToast('领取成功');
+      loadCollection();
+      updateHome();
+    }).catch(function(err) {
+      console.error('领取交易码失败:', err);
+      showToast('领取失败: ' + getErrorMessage(err));
+    });
+  }
+
   function addFriend() {
-    let userId;
+    var userId;
     try {
       userId = requireUserId();
     } catch (err) {
       showToast(err.message);
       return;
     }
-    const input = document.getElementById('friend-id-input');
-    const friendId = input.value.trim().toUpperCase();
+    var input = document.getElementById('friend-id-input');
+    var friendId = input.value.trim().toUpperCase();
     if (!friendId) {
       showToast('请输入好友 ID');
       return;
@@ -352,58 +581,93 @@
 
   function loadFriends() {
     if (!appState.user) return;
-    const userId = requireUserId();
+    var userId = requireUserId();
     SocialLayer.listFriends(userId).then(function(res) {
-      const container = document.getElementById('friends-list');
+      var container = document.getElementById('friends-list');
       container.innerHTML = '';
       if (!res.data || !res.data.length) {
         container.innerHTML = '<div class="empty-state"><p>还没有好友，去添加吧！</p></div>';
         return;
       }
-      const friendIds = res.data.map(function(friend) { return friend.friend_id; });
-      sb(supabase.from('users').select('*').in('id', friendIds)).then(function(userRes) {
-        const users = userRes.data || [];
+      var friendIds = res.data.map(function(friend) { return friend.friend_id; });
+      sb(function() { return supabase.from('users').select('*').in('id', friendIds); }).then(function(userRes) {
+        var users = userRes.data || [];
         res.data.forEach(function(friend) {
-          const friendUser = users.find(function(user) { return user.id === friend.friend_id; });
+          var friendUser = findUserById(users, friend.friend_id);
           if (!friendUser) return;
-          const el = document.createElement('div');
+          var el = document.createElement('div');
           el.className = 'friend-item';
           el.innerHTML = '<div class="friend-avatar">' + (friendUser.avatar || '😀') + '</div><div class="friend-info"><div class="friend-name">' + friendUser.name + '</div><div class="friend-id-display">ID: ' + friendUser.id + '</div></div><button class="btn-remove btn-danger btn-small">删除</button>';
           el.querySelector('.btn-remove').onclick = function() {
             SocialLayer.removeFriend(userId, friend.friend_id).then(function() {
               showToast('已删除好友');
               loadFriends();
+            }).catch(function(err) {
+              console.error('删除好友失败:', err);
+              showToast('删除失败');
             });
           };
           container.appendChild(el);
         });
+      }).catch(function(err) {
+        console.error('加载好友资料失败:', err);
+        showToast('加载好友资料失败');
       });
     }).catch(function() {
       showToast('加载好友失败');
     });
   }
 
+  function findUserById(users, userId) {
+    for (var i = 0; i < users.length; i += 1) {
+      if (users[i].id === userId) return users[i];
+    }
+    return null;
+  }
+
   function drawCard() {
-    let total = 0;
+    var total = 0;
     RARITY_POOL.forEach(function(item) { total += item.weight; });
-    let rand = Math.floor(Math.random() * total);
-    for (let i = 0; i < RARITY_POOL.length; i += 1) {
+    var rand = Math.floor(Math.random() * total);
+    for (var i = 0; i < RARITY_POOL.length; i += 1) {
       rand -= RARITY_POOL[i].weight;
       if (rand < 0) {
-        const rarity = RARITY_POOL[i].rarity;
+        var rarity = RARITY_POOL[i].rarity;
         return {
           name: CARD_NAMES[rarity][Math.floor(Math.random() * CARD_NAMES[rarity].length)],
-          rarity: rarity
+          rarity: rarity,
+          image: CARD_IMAGES[rarity]
         };
       }
     }
-    return { name: CARD_NAMES.N[0], rarity: 'N' };
+    return { name: CARD_NAMES.N[0], rarity: 'N', image: CARD_IMAGES.N };
+  }
+
+  function renderGachaResult(card, userId) {
+    var ownerId = card.owner_id || card.user_id || userId;
+    var image = card.image || CARD_IMAGES[card.rarity] || '/icon-192.png';
+    return '<div class="result-details">' +
+      '<img class="card-asset-image card-asset-image-large" src="' + image + '" alt="' + card.name + '">' +
+      '<div class="card-rarity rarity-' + card.rarity + '" style="width:50px;height:50px;font-size:16px;border-radius:12px;margin-bottom:10px;">' + card.rarity + '</div>' +
+      '<div class="result-name">' + card.name + '</div>' +
+      '<div class="result-rarity rarity-' + card.rarity + '" style="padding:4px 12px;border-radius:8px;">' + card.rarity + ' 稀有</div>' +
+      '<div class="card-owner">归属: ' + ownerId + '</div>' +
+      '<div class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</div>' +
+      '</div>';
   }
 
   function renderGachaUI(remaining) {
-    const remain = Number(remaining || 0);
-    const label = document.getElementById('gacha-remain');
-    const button = document.getElementById('btn-gacha');
+    var remain = Number(remaining || 0);
+    var label = document.getElementById('gacha-remain');
+    var button = document.getElementById('btn-gacha');
+    if (appState.adminMode) {
+      if (label) label.textContent = '管理员模式：无限抽卡';
+      if (button) {
+        button.disabled = false;
+        button.textContent = '开始抽卡！（管理员无限）';
+      }
+      return;
+    }
     if (label) label.textContent = '剩余次数: ' + remain + '/' + DAILY_GACHA_LIMIT;
     if (button) {
       button.disabled = remain <= 0;
@@ -416,6 +680,10 @@
       renderGachaUI(0);
       return;
     }
+    if (appState.adminMode) {
+      renderGachaUI(DAILY_GACHA_LIMIT);
+      return;
+    }
     UserCore.getGachaRemaining(requireUserId()).then(renderGachaUI).catch(function(err) {
       console.error('加载抽卡次数失败:', err);
       renderGachaUI(0);
@@ -425,7 +693,7 @@
 
   function runGacha() {
     if (appState.isDrawing) return;
-    let userId;
+    var userId;
     try {
       userId = requireUserId();
     } catch (err) {
@@ -433,36 +701,42 @@
       return;
     }
 
-    UserCore.getGachaRemaining(userId).then(function(remaining) {
+    var remainingRequest = appState.adminMode ? Promise.resolve(DAILY_GACHA_LIMIT) : UserCore.getGachaRemaining(userId);
+    remainingRequest.then(function(remaining) {
       if (remaining <= 0) {
         showToast('次数已耗尽');
         renderGachaUI(0);
         return;
       }
 
-      const nextRemaining = Math.max(0, remaining - 1);
-      const resultEl = document.getElementById('gacha-result');
-      const card = drawCard();
-      let cardSaved = false;
+      var nextRemaining = Math.max(0, remaining - 1);
+      var resultEl = document.getElementById('gacha-result');
+      var card = drawCard();
+      var cardSaved = false;
       appState.isDrawing = true;
 
       resultEl.classList.add('flipped');
       resultEl.innerHTML = '<span class="placeholder">抽卡中...</span>';
 
       setTimeout(function() {
-        resultEl.innerHTML = '<div class="result-details"><div class="card-rarity rarity-' + card.rarity + '" style="width:50px;height:50px;font-size:16px;border-radius:12px;margin-bottom:10px;">' + card.rarity + '</div><div class="result-name">' + card.name + '</div><div class="result-rarity rarity-' + card.rarity + '" style="padding:4px 12px;border-radius:8px;">' + card.rarity + ' 稀有</div></div>';
-        AssetLayer.createCard(userId, card).then(function() {
+        resultEl.innerHTML = renderGachaResult(card, userId);
+        AssetLayer.createCard(userId, card).then(function(res) {
           cardSaved = true;
+          card = res.data || card;
+          resultEl.innerHTML = renderGachaResult(card, userId);
+          if (appState.adminMode) return Promise.resolve(remaining);
           return UserCore.setGachaRemaining(userId, nextRemaining);
         }).then(function(savedRemaining) {
           renderGachaUI(savedRemaining);
           showToast('获得 ' + card.rarity + ': ' + card.name);
           updateHome();
+          appState.isDrawing = false;
         }).catch(function(err) {
           console.error('抽卡保存失败:', err);
           loadGachaRemain();
           if (isMissingUserError(err)) {
             handleMissingUserSession();
+            appState.isDrawing = false;
             return;
           }
           if (cardSaved) {
@@ -471,7 +745,6 @@
           } else {
             showToast('保存失败: ' + getErrorMessage(err));
           }
-        }).finally(function() {
           appState.isDrawing = false;
         });
       }, 800);
@@ -483,20 +756,27 @@
 
   function loadCollection() {
     if (!appState.user) return;
-    const userId = requireUserId();
+    var userId = requireUserId();
     AssetLayer.listCards(userId).then(function(res) {
-      const container = document.getElementById('collection-list');
+      var container = document.getElementById('collection-list');
       container.innerHTML = '';
       if (!res.data || !res.data.length) {
         container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
         return;
       }
-      const rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
+      var rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
       res.data.slice().sort(function(a, b) {
         return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
       }).forEach(function(card) {
-        const item = createCardItem(card);
-        const del = document.createElement('button');
+        var item = createCardItem(card);
+        var tradeButton = document.createElement('button');
+        tradeButton.className = 'card-trade';
+        tradeButton.textContent = Number(card.trade_count || 0) >= 1 ? '已交易' : '生成交易码';
+        tradeButton.disabled = Number(card.trade_count || 0) >= 1;
+        tradeButton.onclick = function() {
+          createTradeCodeForCard(card, 0);
+        };
+        var del = document.createElement('button');
         del.className = 'card-delete';
         del.textContent = '✕';
         del.title = '删除';
@@ -506,8 +786,12 @@
             showToast('已删除');
             loadCollection();
             updateHome();
+          }).catch(function(err) {
+            console.error('删除卡牌失败:', err);
+            showToast('删除失败');
           });
         };
+        item.appendChild(tradeButton);
         item.appendChild(del);
         container.appendChild(item);
       });
@@ -517,21 +801,22 @@
   }
 
   function renderMessages(messages) {
-    const container = document.getElementById('messages');
+    var container = document.getElementById('messages');
     container.innerHTML = '';
     if (!messages.length) {
       container.innerHTML = '<div class="empty-state">还没有留言</div>';
       return;
     }
     messages.forEach(function(message) {
-      const row = document.createElement('div');
+      var row = document.createElement('div');
       row.className = 'msg-row';
-      const span = document.createElement('span');
+      var span = document.createElement('span');
       span.className = 'msg-content';
-      const sender = '<span class="msg-sender">' + (appState.user.avatar || '😀') + ' ' + appState.user.name + '</span> ';
+      var senderName = appState.adminMode && message.user_id ? message.user_id : appState.user.name;
+      var sender = '<span class="msg-sender">' + (appState.user.avatar || '😀') + ' ' + senderName + '</span> ';
       span.innerHTML = sender + (message.type === 'mood' ? '今天的心情：' + message.content : message.content) + '  [' + formatDate(message.created_at) + ']';
       row.appendChild(span);
-      const button = document.createElement('button');
+      var button = document.createElement('button');
       button.className = 'delete-btn';
       button.title = '删除';
       button.textContent = '🗑️';
@@ -543,8 +828,9 @@
 
   function loadMessages() {
     if (!appState.user) return;
-    const userId = requireUserId();
-    SocialLayer.listMessages(userId).then(function(res) {
+    var userId = requireUserId();
+    var request = appState.adminMode ? SocialLayer.listAllMessages() : SocialLayer.listMessages(userId);
+    request.then(function(res) {
       renderMessages(res.data || []);
     }).catch(function() {
       showToast('加载留言失败');
@@ -552,15 +838,15 @@
   }
 
   function sendMessage() {
-    let userId;
+    var userId;
     try {
       userId = requireUserId();
     } catch (err) {
       showToast(err.message);
       return;
     }
-    const input = document.getElementById('userInput');
-    const text = input.value.trim();
+    var input = document.getElementById('userInput');
+    var text = input.value.trim();
     if (!text) return;
     SocialLayer.createMessage(userId, 'text', text).then(function() {
       input.value = '';
@@ -572,7 +858,7 @@
   }
 
   function sendMood(mood) {
-    let userId;
+    var userId;
     try {
       userId = requireUserId();
     } catch (err) {
@@ -586,7 +872,55 @@
 
   function deleteMessage(id) {
     if (!appState.user) return;
-    SocialLayer.deleteMessage(requireUserId(), id).then(loadMessages).catch(function() {});
+    var request = appState.adminMode ? SocialLayer.deleteAnyMessage(id) : SocialLayer.deleteMessage(requireUserId(), id);
+    request.then(loadMessages).catch(function(err) {
+      console.error('删除留言失败:', err);
+      showToast('删除失败');
+    });
+  }
+
+  function openPage(page) {
+    showPage(page);
+    if (page === 'home') updateHome();
+    if (page === 'me') updateHome();
+    if (page === 'pursuit') updateAdminStatus();
+    if (page === 'friends') loadFriends();
+    if (page === 'collection') loadCollection();
+    if (page === 'gacha') loadGachaRemain();
+    if (page === 'message') loadMessages();
+  }
+
+  function enableAdminMode() {
+    var input = document.getElementById('admin-password-input');
+    var value = input ? input.value : '';
+    if (value !== ADMIN_PASSWORD) {
+      showToast('管理员密码错误');
+      return;
+    }
+    appState.adminMode = true;
+    if (input) input.value = '';
+    showToast('ADMIN_MODE 已开启');
+    updateAdminStatus();
+    loadGachaRemain();
+    if (document.getElementById('page-message').classList.contains('active')) loadMessages();
+  }
+
+  function updateAdminStatus() {
+    var status = document.getElementById('admin-status');
+    if (status) status.textContent = 'ADMIN_MODE: ' + (appState.adminMode ? 'ON' : 'OFF');
+    var debugPanel = document.getElementById('debug-panel');
+    if (debugPanel) {
+      debugPanel.style.display = appState.adminMode ? 'block' : 'none';
+      debugPanel.innerHTML = appState.adminMode ? renderDebugPanel() : '';
+    }
+  }
+
+  function renderDebugPanel() {
+    var userId = appState.user && appState.user.id ? appState.user.id : '-';
+    return '<div>debug panel</div>' +
+      '<div>user_id: ' + userId + '</div>' +
+      '<div>adminMode: ' + String(appState.adminMode) + '</div>' +
+      '<div>gacha_remaining: ' + (appState.user && appState.user.gacha_remaining != null ? appState.user.gacha_remaining : '-') + '</div>';
   }
 
   function bindEvents() {
@@ -599,6 +933,19 @@
       if (e.key === 'Enter') addFriend();
     };
     document.getElementById('btn-gacha').onclick = runGacha;
+    document.getElementById('btn-show-admin').onclick = function() {
+      var panel = document.getElementById('admin-panel');
+      if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      updateAdminStatus();
+    };
+    document.getElementById('btn-admin-login').onclick = enableAdminMode;
+    document.getElementById('admin-password-input').onkeypress = function(e) {
+      if (e.key === 'Enter') enableAdminMode();
+    };
+    document.getElementById('btn-claim-trade').onclick = claimTradeCode;
+    document.getElementById('trade-code-input').onkeypress = function(e) {
+      if (e.key === 'Enter') claimTradeCode();
+    };
     document.getElementById('myBtn').onclick = function() {
       document.getElementById('myBtn').style.display = 'none';
       document.getElementById('inputArea').style.display = 'flex';
@@ -614,29 +961,60 @@
         sendMood(button.getAttribute('data-mood'));
       };
     });
+    document.querySelectorAll('[data-open-page]').forEach(function(button) {
+      button.onclick = function() {
+        openPage(button.getAttribute('data-open-page'));
+      };
+    });
     document.querySelectorAll('.nav-item').forEach(function(button) {
       button.onclick = function() {
-        const page = button.getAttribute('data-page');
-        showPage(page);
-        if (page === 'home') updateHome();
-        if (page === 'friends') loadFriends();
-        if (page === 'collection') loadCollection();
-        if (page === 'gacha') loadGachaRemain();
-        if (page === 'message') loadMessages();
+        var page = button.getAttribute('data-page');
+        openPage(page);
       };
     });
 
   }
 
   function init() {
-    hideLoading();
-    renderAvatarPicker();
-    bindEvents();
-    restoreSession().then(function(user) {
-      if (user) enterApp(user, '欢迎回来，' + user.name);
-      else showLoginPage();
+    try {
+      hideLoading();
+      renderAvatarPicker();
+      bindEvents();
+      registerServiceWorker();
+      restoreSession().then(function(user) {
+        if (user) enterApp(user, '欢迎回来，' + user.name);
+        else showLoginPage();
+      }).catch(function(err) {
+        console.error('初始化登录状态失败:', err);
+        clearCurrentUser();
+        showLoginPage();
+      });
+    } catch (err) {
+      console.error('初始化失败:', err);
+      recoverFromFatalError();
+    }
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js').catch(function(err) {
+        console.error('Service worker registration failed:', err);
+      });
     });
   }
 
-  init();
+  function startAppWhenReady() {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function onReady() {
+        document.removeEventListener('DOMContentLoaded', onReady);
+        init();
+      });
+      return;
+    }
+    init();
+  }
+
+  startAppWhenReady();
 })();
+

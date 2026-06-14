@@ -36,9 +36,11 @@
 
   function recoverFromFatalError() {
     var run = function() {
-      hideLoading();
-      var hasActivePage = document.querySelector('.page.active');
-      if (!hasActivePage) showLoginPage();
+      safeRender(function() {
+        hideLoading();
+        var hasActivePage = document.querySelector('.page.active');
+        if (!hasActivePage) showLoginPage();
+      }, 'recoverFromFatalError');
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function onReady() {
@@ -68,31 +70,62 @@
       msg.indexOf('rate limit') !== -1;
   }
 
-  function sb(requestFactory, retryLimit) {
+  function safeRender(renderFn, label) {
+    try {
+      if (typeof renderFn === 'function') return renderFn();
+    } catch (err) {
+      console.error('safeRender failed:', label || 'render', err);
+      recoverFromFatalError();
+    }
+    return null;
+  }
+
+  function eachNode(nodes, handler) {
+    if (!nodes || !handler) return;
+    for (var i = 0; i < nodes.length; i += 1) {
+      handler(nodes[i], i);
+    }
+  }
+
+  function safeQuery(requestFactory, defaultData, retryLimit) {
     var maxRetries = retryLimit == null ? SUPABASE_RETRY_LIMIT : retryLimit;
     var attempt = 0;
+    var fallback = defaultData == null ? [] : defaultData;
 
     function run() {
       var request;
       try {
         request = typeof requestFactory === 'function' ? requestFactory() : requestFactory;
       } catch (err) {
-        return Promise.reject(err);
+        console.error('safeQuery factory failed:', err);
+        return Promise.resolve({ data: fallback, error: err, safeFailed: true });
       }
 
       return Promise.resolve(request).then(function(res) {
-        if (res && res.error) throw res.error;
-        return res;
+        if (res && res.error) {
+          if (attempt < maxRetries && shouldRetrySupabaseError(res.error)) {
+            attempt += 1;
+            return delay(300 * attempt).then(run);
+          }
+          console.error('safeQuery Supabase error:', res.error);
+          return { data: fallback, error: res.error, safeFailed: true };
+        }
+        return res || { data: fallback, error: null };
       }).catch(function(err) {
         if (attempt < maxRetries && shouldRetrySupabaseError(err)) {
           attempt += 1;
           return delay(300 * attempt).then(run);
         }
-        throw err;
+        console.error('safeQuery failed:', err);
+        return { data: fallback, error: err, safeFailed: true };
       });
     }
 
     return run();
+  }
+
+  function sb(requestFactory, retryLimit) {
+    return safeQuery(requestFactory, [], retryLimit);
   }
 
   function requireUserId() {
@@ -113,17 +146,28 @@
   }
 
   function showToast(msg) {
-    var el = document.createElement('div');
-    el.className = 'toast';
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(function() {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    }, 2100);
+    safeRender(function() {
+      var el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(function() {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 2100);
+    }, 'showToast');
   }
 
   function generateUserId() {
     return 'U' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+  }
+
+  function generateTradeId() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var code = '';
+    for (var i = 0; i < 18; i += 1) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
   }
 
   function formatDate(d) {
@@ -142,32 +186,41 @@
   }
 
   function hideLoading() {
-    var overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.classList.add('hidden');
+    safeRender(function() {
+      var overlay = document.getElementById('loading-overlay');
+      if (overlay) overlay.classList.add('hidden');
+    }, 'hideLoading');
   }
 
   function showPage(name) {
-    document.querySelectorAll('.page').forEach(function(page) {
-      page.classList.remove('active');
-    });
-    var target = document.getElementById('page-' + name);
-    if (target) target.classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(function(button) {
-      button.classList.toggle('active', button.getAttribute('data-page') === name);
-    });
+    safeRender(function() {
+      eachNode(document.querySelectorAll('.page'), function(page) {
+        page.classList.remove('active');
+      });
+      var target = document.getElementById('page-' + name);
+      if (target) target.classList.add('active');
+      eachNode(document.querySelectorAll('.nav-item'), function(button) {
+        button.classList.toggle('active', button.getAttribute('data-page') === name);
+      });
+    }, 'showPage:' + name);
   }
 
   function showLoginPage() {
-    var nav = document.getElementById('bottom-nav');
-    if (nav) nav.style.display = 'none';
-    showPage('login');
+    safeRender(function() {
+      var nav = document.getElementById('bottom-nav');
+      if (nav) nav.style.display = 'none';
+      showPage('login');
+    }, 'showLoginPage');
   }
 
   function showAppPage(name) {
-    var nav = document.getElementById('bottom-nav');
-    if (nav) nav.style.display = 'flex';
-    document.getElementById('page-login').classList.remove('active');
-    showPage(name);
+    safeRender(function() {
+      var nav = document.getElementById('bottom-nav');
+      var loginPage = document.getElementById('page-login');
+      if (nav) nav.style.display = 'flex';
+      if (loginPage) loginPage.classList.remove('active');
+      showPage(name);
+    }, 'showAppPage:' + name);
   }
 
   function setCurrentUser(user) {
@@ -254,8 +307,20 @@
     listCards: function(userId) {
       return sb(function() { return supabase.from('cards').select('*').eq('owner_id', userId).order('created_at', { ascending: false }); });
     },
+    listWarehouse: function(userId) {
+      return sb(function() { return supabase.from('cards').select('*').eq('owner_id', userId).order('created_at', { ascending: false }); });
+    },
+    listFavorites: function(userId) {
+      return sb(function() { return supabase.from('cards').select('*').eq('user_id', userId).eq('is_favorited', true).order('created_at', { ascending: false }); });
+    },
+    listFavoriteCandidates: function(userId) {
+      return sb(function() { return supabase.from('cards').select('id,user_id,name,rarity,image,trade_count,trade_id,is_favorited,created_at').eq('user_id', userId).order('created_at', { ascending: false }); });
+    },
     getCardById: function(cardId) {
       return sb(function() { return supabase.from('cards').select('*').eq('id', cardId).limit(1); });
+    },
+    getCardByTradeId: function(tradeId) {
+      return sb(function() { return supabase.from('cards').select('*').eq('trade_id', tradeId).limit(1); });
     },
     recentCards: function(userId) {
       return sb(function() { return supabase.from('cards').select('*').eq('owner_id', userId).order('created_at', { ascending: false }).limit(3); });
@@ -268,19 +333,55 @@
           name: card.name,
           rarity: card.rarity,
           image: card.image,
-          trade_count: 0
+          trade_id: card.trade_id || generateTradeId(),
+          trade_count: 0,
+          is_favorited: false
         }).select('*').single();
       });
+    },
+    createCards: function(userId, cards) {
+      var rows = cards.map(function(card) {
+        return {
+          user_id: userId,
+          owner_id: userId,
+          name: card.name,
+          rarity: card.rarity,
+          image: card.image,
+          trade_id: card.trade_id || generateTradeId(),
+          trade_count: 0,
+          is_favorited: false
+        };
+      });
+      return sb(function() { return supabase.from('cards').insert(rows).select('*'); });
     },
     deleteCard: function(userId, id) {
       return sb(function() { return supabase.from('cards').delete().match({ id: id, owner_id: userId }); });
     },
+    toggleFavorite: function(cardId, userId, isFavorited) {
+      return sb(function() {
+        return supabase.from('cards').update({
+          is_favorited: isFavorited
+        }).match({ id: cardId, owner_id: userId }).select('*').single();
+      });
+    },
     transferCard: function(cardId, ownerId) {
       return sb(function() {
         return supabase.from('cards').update({
+          user_id: ownerId,
           owner_id: ownerId,
-          trade_count: 1
+          trade_count: 1,
+          is_favorited: false
         }).eq('id', cardId).select('*').single();
+      });
+    },
+    transferByTradeId: function(tradeId, ownerId) {
+      return sb(function() {
+        return supabase.from('cards').update({
+          user_id: ownerId,
+          owner_id: ownerId,
+          trade_count: 1,
+          is_favorited: false
+        }).eq('trade_id', tradeId).lt('trade_count', 1).select('*').single();
       });
     }
   };
@@ -336,22 +437,24 @@
   };
 
   function renderAvatarPicker() {
-    var grid = document.getElementById('avatar-grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    AVATARS.forEach(function(avatar, index) {
-      var el = document.createElement('div');
-      el.className = 'avatar-option' + (index === 0 ? ' selected' : '');
-      el.textContent = avatar;
-      el.onclick = function() {
-        appState.selectedAvatar = avatar;
-        grid.querySelectorAll('.avatar-option').forEach(function(option) {
-          option.classList.remove('selected');
-        });
-        el.classList.add('selected');
-      };
-      grid.appendChild(el);
-    });
+    safeRender(function() {
+      var grid = document.getElementById('avatar-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      AVATARS.forEach(function(avatar, index) {
+        var el = document.createElement('div');
+        el.className = 'avatar-option' + (index === 0 ? ' selected' : '');
+        el.textContent = avatar;
+        el.onclick = function() {
+          appState.selectedAvatar = avatar;
+          eachNode(grid.querySelectorAll('.avatar-option'), function(option) {
+            option.classList.remove('selected');
+          });
+          el.classList.add('selected');
+        };
+        grid.appendChild(el);
+      });
+    }, 'renderAvatarPicker');
   }
 
   function restoreSession() {
@@ -383,6 +486,10 @@
 
   function login() {
     var nameInput = document.getElementById('login-name');
+    if (!nameInput) {
+      showToast('登录组件未加载');
+      return;
+    }
     var name = nameInput.value.trim();
     if (!name) {
       showToast('请输入名字');
@@ -408,41 +515,55 @@
   function updateHome() {
     if (!appState.user) return;
     var userId = requireUserId();
-    setText('me-avatar', appState.user.avatar || '😀');
-    setText('me-name', appState.user.name);
-    setText('me-id', userId);
-    updateAdminStatus();
+    safeRender(function() {
+      setText('me-avatar', appState.user.avatar || '😀');
+      setText('me-name', appState.user.name);
+      setText('me-id', userId);
+      updateAdminStatus();
+    }, 'updateHome:profile');
 
     AssetLayer.listCards(userId).then(function(res) {
-      document.getElementById('stat-collection').textContent = (res.data || []).length;
+      safeRender(function() {
+        setText('stat-collection', (res.data || []).length);
+      }, 'updateHome:cards');
     }).catch(function() {
-      document.getElementById('stat-collection').textContent = '0';
+      setText('stat-collection', '0');
     });
 
     SocialLayer.listFriends(userId).then(function(res) {
-      document.getElementById('stat-friends').textContent = (res.data || []).length;
+      safeRender(function() {
+        setText('stat-friends', (res.data || []).length);
+      }, 'updateHome:friends');
     }).catch(function() {
-      document.getElementById('stat-friends').textContent = '0';
+      setText('stat-friends', '0');
     });
 
     AssetLayer.recentCards(userId).then(function(res) {
-      var container = document.getElementById('home-recent-cards');
-      container.innerHTML = '';
-      if (!res.data || !res.data.length) {
-        container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
-        return;
-      }
-      res.data.forEach(function(card) {
-        container.appendChild(createCardItem(card));
-      });
+      safeRender(function() {
+        var container = document.getElementById('home-recent-cards');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!res.data || !res.data.length) {
+          container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
+          return;
+        }
+        res.data.forEach(function(card) {
+          container.appendChild(createCardItem(card));
+        });
+      }, 'updateHome:recentCards');
     }).catch(function() {
-      document.getElementById('home-recent-cards').innerHTML = '<div class="empty-state">加载失败</div>';
+      safeRender(function() {
+        var container = document.getElementById('home-recent-cards');
+        if (container) container.innerHTML = '<div class="empty-state">加载失败</div>';
+      }, 'updateHome:recentCardsError');
     });
   }
 
   function setText(id, value) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = value;
+    safeRender(function() {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }, 'setText:' + id);
   }
 
   function createCardItem(card) {
@@ -456,6 +577,7 @@
       '<div class="card-asset-info">' +
       '<span class="card-name">' + (card.name || '') + '</span>' +
       '<span class="card-owner">归属: ' + ownerId + '</span>' +
+      '<span class="card-owner">trade_id: ' + (card.trade_id || '待生成') + '</span>' +
       '<span class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</span>' +
       '</div>' +
       '<span class="card-time">' + formatDate(card.created_at) + '</span>';
@@ -474,26 +596,19 @@
   function createTradeCodeForCard(card, attempt) {
     var userId = requireUserId();
     if (card.trade_count >= 1) {
-      showToast('已交易卡不能再次生成 code');
+      showToast('已交易卡不能再次交易');
       return;
     }
     if ((card.owner_id || card.user_id) !== userId) {
       showToast('只能交易自己的卡牌');
       return;
     }
-    var tradeCode = generateTradeCode();
-    TradeLayer.createTrade(card.id, userId, tradeCode).then(function() {
-      showToast('交易码: ' + tradeCode);
-      if (window.prompt) window.prompt('交易码已生成，请复制', tradeCode);
-    }).catch(function(err) {
-      var tryCount = attempt || 0;
-      if (tryCount < 2 && getErrorMessage(err).toLowerCase().indexOf('duplicate') !== -1) {
-        createTradeCodeForCard(card, tryCount + 1);
-        return;
-      }
-      console.error('生成交易码失败:', err);
-      showToast('生成交易码失败: ' + getErrorMessage(err));
-    });
+    if (!card.trade_id) {
+      showToast('这张卡缺少 trade_id，请先更新数据库字段后重新抽卡');
+      return;
+    }
+    showToast('trade_id: ' + card.trade_id);
+    if (window.prompt) window.prompt('18位 trade_id，请复制给对方领取', card.trade_id);
   }
 
   function claimTradeCode() {
@@ -504,38 +619,38 @@
     var input = document.getElementById('trade-code-input');
     var code = input ? input.value.trim().toUpperCase() : '';
     if (!code) {
-      showToast('请输入交易码');
+      showToast('请输入 trade_id');
+      return;
+    }
+    if (code.length !== 18) {
+      showToast('trade_id 必须是18位');
       return;
     }
     var userId = requireUserId();
-    TradeLayer.getByCode(code).then(function(res) {
-      var trade = res.data && res.data.length ? res.data[0] : null;
-      if (!trade) {
-        showToast('交易码不存在');
+    AssetLayer.getCardByTradeId(code).then(function(res) {
+      var card = res.data && res.data.length ? res.data[0] : null;
+      if (!card) {
+        showToast('trade_id 不存在');
         return null;
       }
-      if (trade.used) {
+      if (Number(card.trade_count || 0) >= 1) {
         showToast('已失效');
         return null;
       }
-      return AssetLayer.getCardById(trade.card_id).then(function(cardRes) {
-        var card = cardRes.data && cardRes.data.length ? cardRes.data[0] : null;
-        if (!card || Number(card.trade_count || 0) >= 1) {
-          showToast('已失效');
-          return null;
-        }
-        return AssetLayer.transferCard(trade.card_id, userId).then(function() {
-          return TradeLayer.markUsed(trade.id, userId);
-        });
-      });
+      if ((card.owner_id || card.user_id) === userId) {
+        showToast('这张卡已经属于你');
+        return null;
+      }
+      return AssetLayer.transferByTradeId(code, userId);
     }).then(function(result) {
       if (!result) return;
       if (input) input.value = '';
       showToast('领取成功');
       loadCollection();
+      loadWarehouse();
       updateHome();
     }).catch(function(err) {
-      console.error('领取交易码失败:', err);
+      console.error('领取 trade_id 失败:', err);
       showToast('领取失败: ' + getErrorMessage(err));
     });
   }
@@ -652,8 +767,34 @@
       '<div class="result-name">' + card.name + '</div>' +
       '<div class="result-rarity rarity-' + card.rarity + '" style="padding:4px 12px;border-radius:8px;">' + card.rarity + ' 稀有</div>' +
       '<div class="card-owner">归属: ' + ownerId + '</div>' +
+      '<div class="card-trade-count">trade_id: ' + (card.trade_id || '保存后生成') + '</div>' +
       '<div class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</div>' +
       '</div>';
+  }
+
+  function renderGachaBacks(cards, userId, onAllFlipped) {
+    var resultEl = document.getElementById('gacha-result');
+    var flippedCount = 0;
+    resultEl.classList.remove('flipped');
+    resultEl.classList.add('gacha-spread');
+    resultEl.innerHTML = '';
+    cards.forEach(function(card, index) {
+      var slot = document.createElement('button');
+      slot.type = 'button';
+      slot.className = 'gacha-flip-card';
+      slot.innerHTML =
+        '<div class="gacha-flip-inner">' +
+        '<div class="gacha-face gacha-back"><span>卡牌</span><small>点击翻开</small></div>' +
+        '<div class="gacha-face gacha-front">' + renderGachaResult(card, userId) + '</div>' +
+        '</div>';
+      slot.onclick = function() {
+        if (slot.classList.contains('revealed')) return;
+        slot.classList.add('revealed');
+        flippedCount += 1;
+        if (flippedCount === cards.length) onAllFlipped();
+      };
+      resultEl.appendChild(slot);
+    });
   }
 
   function renderGachaUI(remaining) {
@@ -711,24 +852,24 @@
 
       var nextRemaining = Math.max(0, remaining - 1);
       var resultEl = document.getElementById('gacha-result');
-      var card = drawCard();
-      var cardSaved = false;
+      var cards = [drawCard(), drawCard(), drawCard()];
+      var cardsSaved = false;
       appState.isDrawing = true;
 
-      resultEl.classList.add('flipped');
-      resultEl.innerHTML = '<span class="placeholder">抽卡中...</span>';
-
-      setTimeout(function() {
-        resultEl.innerHTML = renderGachaResult(card, userId);
-        AssetLayer.createCard(userId, card).then(function(res) {
-          cardSaved = true;
-          card = res.data || card;
-          resultEl.innerHTML = renderGachaResult(card, userId);
+      renderGachaBacks(cards, userId, function() {
+        AssetLayer.createCards(userId, cards).then(function(res) {
+          cardsSaved = true;
+          cards = res.data && res.data.length ? res.data : cards;
+          renderGachaBacks(cards, userId, function() {});
+          eachNode(document.querySelectorAll('.gacha-flip-card'), function(slot) {
+            slot.classList.add('revealed');
+            slot.disabled = true;
+          });
           if (appState.adminMode) return Promise.resolve(remaining);
           return UserCore.setGachaRemaining(userId, nextRemaining);
         }).then(function(savedRemaining) {
           renderGachaUI(savedRemaining);
-          showToast('获得 ' + card.rarity + ': ' + card.name);
+          showToast('已获得 3 张卡牌');
           updateHome();
           appState.isDrawing = false;
         }).catch(function(err) {
@@ -739,7 +880,7 @@
             appState.isDrawing = false;
             return;
           }
-          if (cardSaved) {
+          if (cardsSaved) {
             updateHome();
             showToast('卡牌已保存，但次数扣减失败: ' + getErrorMessage(err));
           } else {
@@ -747,21 +888,97 @@
           }
           appState.isDrawing = false;
         });
-      }, 800);
+      });
     }).catch(function(err) {
       console.error('抽卡失败:', err);
       showToast('抽卡失败: ' + getErrorMessage(err));
+      appState.isDrawing = false;
     });
   }
 
   function loadCollection() {
     if (!appState.user) return;
     var userId = requireUserId();
-    AssetLayer.listCards(userId).then(function(res) {
-      var container = document.getElementById('collection-list');
+    console.log('[collection] current user_id:', userId);
+    safeQuery(function() {
+      return supabase
+        .from('cards')
+        .select('id,user_id,name,rarity,image,trade_count,trade_id,is_favorited,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+    }, []).then(function(res) {
+      console.log('[collection] Supabase raw response:', {
+        data: res ? res.data : null,
+        error: res ? res.error : null
+      });
+      var rawCards = res.data || [];
+      var favoriteCards = rawCards.filter(function(card) {
+        return card && card.user_id === userId && card.is_favorited === true;
+      });
+      console.log('[collection] Supabase cards result:', res);
+      console.log('[collection] filtered favorites:', favoriteCards);
+      safeRender(function() {
+        var container = document.getElementById('collection-list');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!favoriteCards.length) {
+          container.innerHTML = '<div class="empty-state">还没有收藏的卡牌</div>';
+          return;
+        }
+        var rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
+        favoriteCards.slice().sort(function(a, b) {
+          return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
+        }).forEach(function(card) {
+          var item = createCardItem(card);
+          item.onclick = function(e) {
+            if (e.target && e.target.tagName === 'BUTTON') return;
+            toggleCardFavorite(card, true);
+          };
+          item.appendChild(createFavoriteButton(card, true));
+          container.appendChild(item);
+        });
+      }, 'loadCollection');
+    }).catch(function(err) {
+      console.error('加载收藏失败:', err);
+      console.error('[collection] query failed for user_id:', userId, 'error:', getErrorMessage(err));
+      showToast('加载收藏失败');
+    });
+  }
+
+  function createFavoriteButton(card, reloadCollectionAfterToggle) {
+    var button = document.createElement('button');
+    button.className = 'card-favorite' + (card.is_favorited ? ' active' : '');
+    button.textContent = card.is_favorited ? '已收藏' : '收藏';
+    button.onclick = function() {
+      toggleCardFavorite(card, reloadCollectionAfterToggle);
+    };
+    return button;
+  }
+
+  function toggleCardFavorite(card, reloadCollectionAfterToggle) {
+    var userId = requireUserId();
+    var next = !card.is_favorited;
+    AssetLayer.toggleFavorite(card.id, userId, next).then(function() {
+      card.is_favorited = next;
+      showToast(next ? '已收藏' : '已取消收藏');
+      if (reloadCollectionAfterToggle) loadCollection();
+      else loadWarehouse();
+      updateHome();
+    }).catch(function(err) {
+      console.error('收藏操作失败:', err);
+      showToast('收藏操作失败');
+    });
+  }
+
+  function loadWarehouse() {
+    if (!appState.user) return;
+    var userId = requireUserId();
+    AssetLayer.listWarehouse(userId).then(function(res) {
+      var container = document.getElementById('warehouse-list');
+      if (!container) return;
       container.innerHTML = '';
       if (!res.data || !res.data.length) {
-        container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
+        container.innerHTML = '<div class="empty-state">仓库还没有卡牌，去抽卡吧！</div>';
         return;
       }
       var rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
@@ -769,10 +986,15 @@
         return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
       }).forEach(function(card) {
         var item = createCardItem(card);
+        item.onclick = function(e) {
+          if (e.target && e.target.tagName === 'BUTTON') return;
+          toggleCardFavorite(card, false);
+        };
+        item.appendChild(createFavoriteButton(card, false));
         var tradeButton = document.createElement('button');
         tradeButton.className = 'card-trade';
-        tradeButton.textContent = Number(card.trade_count || 0) >= 1 ? '已交易' : '生成交易码';
-        tradeButton.disabled = Number(card.trade_count || 0) >= 1;
+        tradeButton.textContent = Number(card.trade_count || 0) >= 1 ? '已交易' : '复制 trade_id';
+        tradeButton.disabled = Number(card.trade_count || 0) >= 1 || !card.trade_id;
         tradeButton.onclick = function() {
           createTradeCodeForCard(card, 0);
         };
@@ -784,7 +1006,7 @@
           if (!confirm('确定删除 ' + card.name + ' ?')) return;
           AssetLayer.deleteCard(userId, card.id).then(function() {
             showToast('已删除');
-            loadCollection();
+            loadWarehouse();
             updateHome();
           }).catch(function(err) {
             console.error('删除卡牌失败:', err);
@@ -795,8 +1017,9 @@
         item.appendChild(del);
         container.appendChild(item);
       });
-    }).catch(function() {
-      showToast('加载收藏失败');
+    }).catch(function(err) {
+      console.error('加载仓库失败:', err);
+      showToast('加载仓库失败');
     });
   }
 
@@ -816,12 +1039,14 @@
       var sender = '<span class="msg-sender">' + (appState.user.avatar || '😀') + ' ' + senderName + '</span> ';
       span.innerHTML = sender + (message.type === 'mood' ? '今天的心情：' + message.content : message.content) + '  [' + formatDate(message.created_at) + ']';
       row.appendChild(span);
-      var button = document.createElement('button');
-      button.className = 'delete-btn';
-      button.title = '删除';
-      button.textContent = '🗑️';
-      button.onclick = function() { deleteMessage(message.id); };
-      row.appendChild(button);
+      if (appState.adminMode) {
+        var button = document.createElement('button');
+        button.className = 'delete-btn';
+        button.title = '删除';
+        button.textContent = '删除';
+        button.onclick = function() { deleteMessage(message.id); };
+        row.appendChild(button);
+      }
       container.appendChild(row);
     });
   }
@@ -872,8 +1097,11 @@
 
   function deleteMessage(id) {
     if (!appState.user) return;
-    var request = appState.adminMode ? SocialLayer.deleteAnyMessage(id) : SocialLayer.deleteMessage(requireUserId(), id);
-    request.then(loadMessages).catch(function(err) {
+    if (!appState.adminMode) {
+      showToast('只有管理员可以删除留言');
+      return;
+    }
+    SocialLayer.deleteAnyMessage(id).then(loadMessages).catch(function(err) {
       console.error('删除留言失败:', err);
       showToast('删除失败');
     });
@@ -886,6 +1114,7 @@
     if (page === 'pursuit') updateAdminStatus();
     if (page === 'friends') loadFriends();
     if (page === 'collection') loadCollection();
+    if (page === 'warehouse') loadWarehouse();
     if (page === 'gacha') loadGachaRemain();
     if (page === 'message') loadMessages();
   }
@@ -923,59 +1152,72 @@
       '<div>gacha_remaining: ' + (appState.user && appState.user.gacha_remaining != null ? appState.user.gacha_remaining : '-') + '</div>';
   }
 
-  function bindEvents() {
-    document.getElementById('btn-login').onclick = login;
-    document.getElementById('login-name').onkeypress = function(e) {
-      if (e.key === 'Enter') login();
-    };
-    document.getElementById('btn-add-friend').onclick = addFriend;
-    document.getElementById('friend-id-input').onkeypress = function(e) {
-      if (e.key === 'Enter') addFriend();
-    };
-    document.getElementById('btn-gacha').onclick = runGacha;
-    document.getElementById('btn-show-admin').onclick = function() {
-      var panel = document.getElementById('admin-panel');
-      if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-      updateAdminStatus();
-    };
-    document.getElementById('btn-admin-login').onclick = enableAdminMode;
-    document.getElementById('admin-password-input').onkeypress = function(e) {
-      if (e.key === 'Enter') enableAdminMode();
-    };
-    document.getElementById('btn-claim-trade').onclick = claimTradeCode;
-    document.getElementById('trade-code-input').onkeypress = function(e) {
-      if (e.key === 'Enter') claimTradeCode();
-    };
-    document.getElementById('myBtn').onclick = function() {
-      document.getElementById('myBtn').style.display = 'none';
-      document.getElementById('inputArea').style.display = 'flex';
-      document.getElementById('moodArea').style.display = 'flex';
-      loadMessages();
-    };
-    document.getElementById('sendBtn').onclick = sendMessage;
-    document.getElementById('userInput').onkeypress = function(e) {
-      if (e.key === 'Enter') sendMessage();
-    };
-    document.querySelectorAll('.mood-btn').forEach(function(button) {
-      button.onclick = function() {
-        sendMood(button.getAttribute('data-mood'));
-      };
-    });
-    document.querySelectorAll('[data-open-page]').forEach(function(button) {
-      button.onclick = function() {
-        openPage(button.getAttribute('data-open-page'));
-      };
-    });
-    document.querySelectorAll('.nav-item').forEach(function(button) {
-      button.onclick = function() {
-        var page = button.getAttribute('data-page');
-        openPage(page);
-      };
-    });
-
+  function bindClick(id, handler) {
+    safeRender(function() {
+      var el = document.getElementById(id);
+      if (el) el.onclick = handler;
+    }, 'bindClick:' + id);
   }
 
-  function init() {
+  function bindEnter(id, handler) {
+    safeRender(function() {
+      var el = document.getElementById(id);
+      if (el) {
+        el.onkeypress = function(e) {
+          e = e || window.event;
+          if (e.key === 'Enter' || e.keyCode === 13) handler();
+        };
+      }
+    }, 'bindEnter:' + id);
+  }
+
+  function bindEvents() {
+    safeRender(function() {
+      bindClick('btn-login', login);
+      bindEnter('login-name', login);
+      bindClick('btn-add-friend', addFriend);
+      bindEnter('friend-id-input', addFriend);
+      bindClick('btn-gacha', runGacha);
+      bindClick('btn-show-admin', function() {
+        var panel = document.getElementById('admin-panel');
+        if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        updateAdminStatus();
+      });
+      bindClick('btn-admin-login', enableAdminMode);
+      bindEnter('admin-password-input', enableAdminMode);
+      bindClick('btn-claim-trade', claimTradeCode);
+      bindEnter('trade-code-input', claimTradeCode);
+      bindClick('myBtn', function() {
+        var myBtn = document.getElementById('myBtn');
+        var inputArea = document.getElementById('inputArea');
+        var moodArea = document.getElementById('moodArea');
+        if (myBtn) myBtn.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'flex';
+        if (moodArea) moodArea.style.display = 'flex';
+        loadMessages();
+      });
+      bindClick('sendBtn', sendMessage);
+      bindEnter('userInput', sendMessage);
+      eachNode(document.querySelectorAll('.mood-btn'), function(button) {
+        button.onclick = function() {
+          sendMood(button.getAttribute('data-mood'));
+        };
+      });
+      eachNode(document.querySelectorAll('[data-open-page]'), function(button) {
+        button.onclick = function() {
+          openPage(button.getAttribute('data-open-page'));
+        };
+      });
+      eachNode(document.querySelectorAll('.nav-item'), function(button) {
+        button.onclick = function() {
+          var page = button.getAttribute('data-page');
+          openPage(page);
+        };
+      });
+    }, 'bindEvents');
+  }
+
+  function initApp() {
     try {
       hideLoading();
       renderAvatarPicker();
@@ -1008,11 +1250,11 @@
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function onReady() {
         document.removeEventListener('DOMContentLoaded', onReady);
-        init();
+        initApp();
       });
       return;
     }
-    init();
+    initApp();
   }
 
   startAppWhenReady();

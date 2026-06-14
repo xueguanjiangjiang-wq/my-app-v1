@@ -58,11 +58,12 @@
     <p class="gacha-desc">发现和管理你的卡牌资产</p>
     <div class="entry-list">
       <button class="entry-item" data-open-page="gacha"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>
-      <button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>查看我的卡牌</small></button>
+      <button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>只看已收藏卡牌</small></button>
+      <button class="entry-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>仓库</span><small>查看全部持有卡牌</small></button>
       <button class="entry-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>
       <button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><small>好友与关系</small></button>
     </div>
-    <div class="section-title">最近收藏</div>
+    <div class="section-title">最近获得</div>
     <div id="home-recent-cards" class="card-list"></div>
   </div>
 
@@ -74,7 +75,7 @@
       <div class="stats-row">
         <div class="stat-item">
           <span class="stat-num" id="stat-collection">0</span>
-          <span class="stat-label">收藏</span>
+          <span class="stat-label">仓库</span>
         </div>
         <div class="stat-item">
           <span class="stat-num" id="stat-friends">0</span>
@@ -86,7 +87,7 @@
       <button class="menu-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><b>›</b></button>
       <button class="menu-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><b>›</b></button>
       <button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板（朋友圈）</span><b>›</b></button>
-      <button class="menu-item" data-open-page="collection"><span><i class="flat-icon icon-work"></i>卡牌作品</span><b>›</b></button>
+      <button class="menu-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>卡牌作品</span><b>›</b></button>
       <button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-face"></i>表情</span><b>›</b></button>
       <button class="menu-item" data-open-page="pursuit"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>
     </div>
@@ -132,14 +133,21 @@
 
   <div id="page-collection" class="page">
     <h1>我的收藏</h1>
+    <p class="gacha-desc">只显示已收藏的卡牌</p>
+    <div id="collection-list" class="card-list"></div>
+  </div>
+
+  <div id="page-warehouse" class="page">
+    <h1>卡牌仓库</h1>
+    <p class="gacha-desc">显示当前账号持有的全部卡牌</p>
     <div class="trade-claim-box">
       <div class="section-title">领取卡牌</div>
       <div class="add-friend-form">
-        <input type="text" id="trade-code-input" placeholder="输入交易码领取卡牌" autocomplete="off">
+        <input type="text" id="trade-code-input" placeholder="输入18位 trade_id 领取卡牌" autocomplete="off" maxlength="18">
         <button id="btn-claim-trade" class="btn-small">领取</button>
       </div>
     </div>
-    <div id="collection-list" class="card-list"></div>
+    <div id="warehouse-list" class="card-list"></div>
   </div>
 
   <div id="page-message" class="page">

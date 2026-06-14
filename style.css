@@ -400,6 +400,20 @@ body {
   background: #f2f2f7;
   color: var(--subtext);
 }
+.card-favorite {
+  border: none;
+  border-radius: 9px;
+  background: #f2f2f7;
+  color: var(--subtext);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 9px;
+  flex-shrink: 0;
+}
+.card-favorite.active {
+  background: rgba(255,159,10,0.14);
+  color: var(--ssr);
+}
 .trade-claim-box {
   background: var(--card);
   border-radius: 14px;
@@ -461,6 +475,89 @@ body {
 .gacha-result .result-details {
   text-align: center; display: flex; flex-direction: column;
   align-items: center; gap: 8px;
+}
+.gacha-result.gacha-spread {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  min-height: 240px;
+  padding: 10px;
+  gap: 10px;
+  background: transparent;
+  box-shadow: none;
+}
+.gacha-flip-card {
+  width: 31%;
+  min-width: 96px;
+  height: 220px;
+  border: none;
+  background: transparent;
+  perspective: 900px;
+  cursor: pointer;
+  padding: 0;
+}
+.gacha-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.55s ease;
+  transform-style: preserve-3d;
+}
+.gacha-flip-card.revealed .gacha-flip-inner {
+  transform: rotateY(180deg);
+}
+.gacha-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.gacha-back {
+  flex-direction: column;
+  gap: 8px;
+  background: linear-gradient(145deg, #1c1c1e, #3a3a3c);
+  color: #fff;
+  font-weight: 700;
+}
+.gacha-back span {
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 12px;
+}
+.gacha-back small {
+  color: rgba(255,255,255,0.68);
+  font-size: 12px;
+  font-weight: 500;
+}
+.gacha-front {
+  background: var(--card);
+  transform: rotateY(180deg);
+  padding: 8px;
+}
+.gacha-front .card-asset-image-large {
+  width: 48px;
+  height: 48px;
+}
+.gacha-front .card-rarity {
+  width: 38px !important;
+  height: 38px !important;
+  font-size: 13px !important;
+  margin-bottom: 4px !important;
+}
+.gacha-front .result-name {
+  font-size: 14px;
+}
+.gacha-front .result-rarity,
+.gacha-front .card-owner,
+.gacha-front .card-trade-count {
+  font-size: 10px;
+  word-break: break-all;
 }
 .placeholder { color: var(--subtext); font-size: 16px; }
 

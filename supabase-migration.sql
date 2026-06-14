@@ -65,15 +65,20 @@ CREATE TABLE IF NOT EXISTS cards (
   name TEXT NOT NULL,
   rarity TEXT NOT NULL CHECK (rarity IN ('N','R','SR','SSR','UR')),
   image TEXT DEFAULT NULL,
+  trade_id TEXT UNIQUE,
   trade_count INTEGER NOT NULL DEFAULT 0,
+  is_favorited BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- V2 卡牌资产字段：owner_id 作为资产归属，trade_count 记录交易次数
+-- V2 卡牌资产字段：owner_id 作为资产归属，trade_id 用于交易，is_favorited 用于收藏
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS owner_id TEXT REFERENCES users(id);
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS trade_id TEXT;
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS trade_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS is_favorited BOOLEAN NOT NULL DEFAULT false;
 UPDATE cards SET owner_id = user_id WHERE owner_id IS NULL;
 ALTER TABLE cards ALTER COLUMN owner_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS cards_trade_id_unique ON cards(trade_id) WHERE trade_id IS NOT NULL;
 
 -- Card RLS 策略
 ALTER TABLE cards ENABLE ROW LEVEL SECURITY;

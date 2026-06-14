@@ -1,0 +1,120 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>蒋的APP</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <!-- Loading 遮罩：在确认登录状态前阻止任何页面渲染 -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>加载中...</p>
+  </div>
+
+  <div id="page-login" class="page">
+    <div class="login-container">
+      <h1>🎴 蒋的APP</h1>
+      <p class="subtitle">关系 · 收藏 · 名片</p>
+      <div class="form-group">
+        <input type="text" id="login-name" placeholder="输入你的名字（昵称）" maxlength="20" autocomplete="off">
+      </div>
+      <div class="avatar-picker">
+        <p>选择头像：</p>
+        <div class="avatar-grid" id="avatar-grid"></div>
+      </div>
+      <button id="btn-login" class="btn-primary">进入系统</button>
+    </div>
+  </div>
+
+  <nav id="bottom-nav" class="bottom-nav" style="display:none;">
+    <button class="nav-item active" data-page="home">
+      <span class="nav-icon">🏠</span><span class="nav-label">主页</span>
+    </button>
+    <button class="nav-item" data-page="friends">
+      <span class="nav-icon">👥</span><span class="nav-label">好友</span>
+    </button>
+    <button class="nav-item" data-page="gacha">
+      <span class="nav-icon">🎰</span><span class="nav-label">抽卡</span>
+    </button>
+    <button class="nav-item" data-page="collection">
+      <span class="nav-icon">📦</span><span class="nav-label">收藏</span>
+    </button>
+    <button class="nav-item" data-page="message">
+      <span class="nav-icon">💬</span><span class="nav-label">留言</span>
+    </button>
+  </nav>
+
+  <div id="page-home" class="page">
+    <div class="profile-card">
+      <div id="home-avatar" class="profile-avatar"></div>
+      <h2 id="home-name"></h2>
+      <p class="user-id">ID: <span id="home-id"></span></p>
+      <div class="stats-row">
+        <div class="stat-item">
+          <span class="stat-num" id="stat-collection">0</span>
+          <span class="stat-label">收藏</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" id="stat-friends">0</span>
+          <span class="stat-label">好友</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-title">最近收藏</div>
+    <div id="home-recent-cards" class="card-list"></div>
+  </div>
+
+  <div id="page-friends" class="page">
+    <h1>👥 好友</h1>
+    <div class="add-friend-form">
+      <input type="text" id="friend-id-input" placeholder="输入好友 user_id">
+      <button id="btn-add-friend" class="btn-small">添加</button>
+    </div>
+    <div id="friends-list" class="friends-list"></div>
+  </div>
+
+  <div id="page-gacha" class="page">
+    <h1>🎰 抽卡</h1>
+    <p class="gacha-desc">点击下方按钮抽取随机卡牌</p>
+    <p class="gacha-remain" id="gacha-remain">今日抽卡: 0/3</p>
+    <div class="gacha-area">
+      <div id="gacha-result" class="gacha-result">
+        <span class="placeholder">等待抽卡...</span>
+      </div>
+    </div>
+    <button id="btn-gacha" class="btn-gacha">开始抽卡！</button>
+  </div>
+
+  <div id="page-collection" class="page">
+    <h1>📦 我的收藏</h1>
+    <div id="collection-list" class="card-list"></div>
+  </div>
+
+  <div id="page-message" class="page">
+    <h1>💬 留言板</h1>
+    <p class="gacha-desc" id="msg">点击按钮进入留言板</p>
+    <button id="myBtn" class="btn-primary">进入留言板</button>
+    <div id="inputArea" style="display:none;">
+      <div class="add-friend-form">
+        <input type="text" id="userInput" placeholder="写点什么..." maxlength="200" autocomplete="off">
+        <button id="sendBtn" class="btn-small">发送</button>
+      </div>
+      <div id="moodArea" style="display:none;">
+        <div class="mood-row">
+          <span style="font-size:13px;color:var(--subtext);margin-right:8px;">心情：</span>
+          <button class="mood-btn" data-mood="开心">😄 开心</button>
+          <button class="mood-btn" data-mood="平静">😌 平静</button>
+          <button class="mood-btn" data-mood="难过">😢 难过</button>
+          <button class="mood-btn" data-mood="生气">😠 生气</button>
+        </div>
+      </div>
+    </div>
+    <div id="messages" class="card-list"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

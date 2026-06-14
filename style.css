@@ -1,0 +1,274 @@
+﻿/* Loading overlay — 防止页面闪烁 */
+.loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}
+
+.loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--subtext);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-overlay p {
+  color: var(--subtext);
+  font-size: 14px;
+}
+:root {
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --text: #1c1c1e;
+  --subtext: #8e8e93;
+  --accent: #007aff;
+  --accent-dark: #0056b3;
+  --n: #86868b;
+  --r: #30d158;
+  --sr: #0a84ff;
+  --ssr: #ff9f0a;
+  --ur: #ff375f;
+  --radius: 16px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  padding-bottom: 70px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* 页面切换 */
+.page { display: none; padding: 20px; min-height: 100vh; }
+.page.active { display: block; }
+
+/* 登录页 */
+.login-container {
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: 60px;
+}
+.login-container h1 { font-size: 28px; margin-bottom: 4px; }
+.subtitle { color: var(--subtext); margin-bottom: 30px; }
+.form-group { width: 100%; max-width: 320px; }
+.form-group input {
+  width: 100%; padding: 14px 16px; border: 1px solid #e5e5ea;
+  border-radius: 12px; font-size: 16px; background: var(--card);
+  outline: none; margin-bottom: 16px;
+}
+.avatar-picker { margin-bottom: 20px; }
+.avatar-picker p { font-size: 14px; color: var(--subtext); margin-bottom: 8px; }
+.avatar-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+}
+.avatar-option {
+  width: 48px; height: 48px; border-radius: 50%; border: 3px solid #e5e5ea;
+  cursor: pointer; font-size: 28px; display: flex; align-items: center;
+  justify-content: center; background: #f8f9fa;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.avatar-option:hover { transform: scale(1.1); }
+.avatar-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,122,255,0.2);
+}
+
+/* 按钮 */
+.btn-primary {
+  width: 100%; max-width: 320px; padding: 14px; border: none;
+  border-radius: 12px; background: var(--accent); color: #fff;
+  font-size: 17px; font-weight: 600; cursor: pointer; margin-bottom: 20px;
+  transition: background 0.2s;
+}
+.btn-primary:active { background: var(--accent-dark); }
+.btn-primary:disabled { opacity: 0.5; }
+
+.btn-small {
+  padding: 10px 18px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 14px;
+  font-weight: 600; cursor: pointer;
+}
+
+.btn-danger { background: var(--ur); }
+
+/* 底部导航 */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; background: var(--card);
+  border-top: 1px solid var(--divider); z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 8px 0; border: none; background: none; color: var(--subtext);
+  font-size: 10px; cursor: pointer;
+}
+.nav-item.active { color: var(--accent); }
+.nav-icon { font-size: 22px; margin-bottom: 2px; }
+
+/* 名片卡片 */
+.profile-card {
+  background: var(--card); border-radius: var(--radius);
+  padding: 30px 20px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 20px;
+}
+.profile-avatar {
+  width: 80px; height: 80px; border-radius: 50%; margin-bottom: 12px;
+  font-size: 50px; display: flex; align-items: center; justify-content: center;
+  background: #f2f2f7;
+}
+.profile-card h2 { font-size: 22px; margin-bottom: 4px; }
+.user-id { color: var(--subtext); font-size: 13px; margin-bottom: 16px; font-family: monospace; }
+.stats-row { display: flex; justify-content: center; gap: 40px; }
+.stat-item { display: flex; flex-direction: column; align-items: center; }
+.stat-num { font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat-label { font-size: 12px; color: var(--subtext); }
+
+/* 通用标题 */
+.section-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+
+/* 卡牌列表 */
+.card-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.card-item {
+  background: var(--card); border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.card-rarity {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.card-name { font-size: 15px; font-weight: 500; flex: 1; }
+.card-delete {
+  margin-left: auto; border: none; background: none;
+  color: var(--subtext); font-size: 18px; cursor: pointer; padding: 4px;
+}
+.card-time { font-size: 11px; color: var(--subtext); }
+
+/* 稀有度颜色 */
+.rarity-N { background: var(--n); }
+.rarity-R { background: var(--r); }
+.rarity-SR { background: var(--sr); }
+.rarity-SSR { background: var(--ssr); }
+.rarity-UR { background: var(--ur); }
+
+/* 好友列表 */
+.friends-list { margin-bottom: 20px; }
+.friend-item {
+  background: var(--card); border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.friend-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 22px; display: flex; align-items: center; justify-content: center;
+  background: #f2f2f7;
+}
+.friend-info { flex: 1; }
+.friend-name { font-size: 15px; font-weight: 500; }
+.friend-id-display { font-size: 12px; color: var(--subtext); font-family: monospace; }
+.btn-remove {
+  border: none; background: none; color: var(--subtext);
+  font-size: 16px; cursor: pointer;
+}
+
+/* 添加好友 */
+.add-friend-form { display: flex; gap: 8px; margin-bottom: 20px; }
+.add-friend-form input {
+  flex: 1; padding: 12px 14px; border: 1px solid #e5e5ea;
+  border-radius: 10px; font-size: 15px; background: var(--card); outline: none;
+}
+
+/* 抽卡 */
+.gacha-desc { color: var(--subtext); margin-bottom: 6px; font-size: 14px; }
+.gacha-remain { color: var(--accent); font-size: 15px; font-weight: 600; margin-bottom: 20px; text-align: center; }
+.gacha-area { display: flex; justify-content: center; margin-bottom: 30px; }
+.gacha-result {
+  width: 200px; height: 260px; background: var(--card);
+  border-radius: var(--radius); display: flex; align-items: center;
+  justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: transform 0.3s;
+}
+.gacha-result.flipped { transform: scale(1.05); }
+.gacha-result .card-rarity {
+  width: 50px; height: 50px; font-size: 16px; border-radius: 12px; margin-bottom: 10px;
+}
+.gacha-result .result-name { font-size: 18px; font-weight: 600; }
+.gacha-result .result-rarity { font-size: 14px; margin-top: 4px; }
+.gacha-result .result-details {
+  text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+}
+.placeholder { color: var(--subtext); font-size: 16px; }
+
+.btn-gacha {
+  width: 100%; max-width: 320px; padding: 16px; border: none;
+  border-radius: 14px; background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  color: #fff; font-size: 19px; font-weight: 700; cursor: pointer;
+  margin: 0 auto; display: block; transition: transform 0.15s;
+}
+.btn-gacha:active { transform: scale(0.97); }
+
+/* 空状态 */
+.empty-state {
+  text-align: center; color: var(--subtext); padding: 40px 0; font-size: 14px;
+}
+
+/* 留言 */
+.mood-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+.mood-btn {
+  padding: 6px 14px; border: 1px solid #e5e5ea; border-radius: 20px;
+  background: var(--card); font-size: 13px; cursor: pointer;
+}
+
+/* 消息 */
+.msg-row {
+  background: var(--card); border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.msg-content { flex: 1; font-size: 14px; line-height: 1.5; word-break: break-all; }
+.delete-btn {
+  border: none; background: none; color: var(--subtext);
+  cursor: pointer; padding: 4px; font-size: 16px;
+}
+
+/* 消息提示 */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px;
+  border-radius: 10px; font-size: 14px; z-index: 999;
+  animation: fadeOut 2s forwards;
+}
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+

@@ -26,13 +26,24 @@
   var DAILY_GACHA_LIMIT = 3;
   var SESSION_USER_ID_KEY = 'cardapp_current_user_id';
   var SUPABASE_RETRY_LIMIT = 2;
+  var TOP_LEVEL_PAGES = {
+    home: true,
+    gacha: true,
+    message: true,
+    pursuit: true
+  };
+  var SWIPE_BACK_EDGE = 32;
+  var SWIPE_BACK_THRESHOLD = 80;
 
   var appState = {
     user: null,
     selectedAvatar: '😀',
     isDrawing: false,
-    adminMode: false
+    adminMode: false,
+    currentPage: 'login'
   };
+  var messagesRealtimeChannel = null;
+  var swipeBackState = null;
 
   function recoverFromFatalError() {
     var run = function() {
@@ -138,11 +149,50 @@
     return err.message || err.details || err.hint || String(err);
   }
 
+  function requireSupabaseSuccess(res) {
+    if (res && res.error) throw res.error;
+    return res;
+  }
+
+  function generateClientMessageId() {
+    return 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
+  }
+
+  function normalizeMessage(message, status) {
+    message = message || {};
+    var createdAt = message.created_at || new Date().toISOString();
+    var clientId = message.client_id || message.local_id || null;
+    return {
+      id: message.id == null ? null : message.id,
+      client_id: clientId,
+      local_id: clientId,
+      user_id: message.user_id || null,
+      content: message.content || '',
+      created_at: createdAt,
+      sync_status: status || message.sync_status || (message.id ? 'synced' : 'pending')
+    };
+  }
+
   function isMissingUserError(err) {
     var msg = getErrorMessage(err);
     return msg.indexOf('cards_user_id_fkey') !== -1 ||
       msg.indexOf('cards_owner_id_fkey') !== -1 ||
       msg.indexOf('foreign key constraint') !== -1;
+  }
+
+  function isMissingMessageColumnError(err) {
+    var msg = getErrorMessage(err).toLowerCase();
+    return msg.indexOf('client_id') !== -1 ||
+      msg.indexOf('user_id') !== -1 ||
+      msg.indexOf('schema cache') !== -1 ||
+      msg.indexOf('could not find') !== -1;
+  }
+
+  function isDuplicateMessageError(err) {
+    var msg = getErrorMessage(err).toLowerCase();
+    return msg.indexOf('duplicate') !== -1 ||
+      msg.indexOf('unique') !== -1 ||
+      msg.indexOf('23505') !== -1;
   }
 
   function showToast(msg) {
@@ -192,6 +242,34 @@
     }, 'hideLoading');
   }
 
+  function isTopLevelPage(name) {
+    return !!TOP_LEVEL_PAGES[name];
+  }
+
+  function isSubPage(name) {
+    return name !== 'login' && !isTopLevelPage(name);
+  }
+
+  function setNavigationChrome(name) {
+    var nav = document.getElementById('bottom-nav');
+    var back = document.getElementById('page-back');
+    var subPage = isSubPage(name);
+    if (document.body) document.body.classList.toggle('is-sub-page', subPage);
+    if (nav) nav.style.display = name !== 'login' && !subPage ? 'flex' : 'none';
+    if (back) back.style.display = subPage ? 'inline-flex' : 'none';
+  }
+
+  function syncHistoryState(name, mode) {
+    if (!window.history || !window.history.pushState) return;
+    var state = {
+      page: name,
+      isSubPage: isSubPage(name)
+    };
+    var url = '#/' + name;
+    if (mode === 'push') window.history.pushState(state, '', url);
+    else window.history.replaceState(state, '', url);
+  }
+
   function showPage(name) {
     safeRender(function() {
       eachNode(document.querySelectorAll('.page'), function(page) {
@@ -199,6 +277,8 @@
       });
       var target = document.getElementById('page-' + name);
       if (target) target.classList.add('active');
+      appState.currentPage = target ? name : appState.currentPage;
+      setNavigationChrome(name);
       eachNode(document.querySelectorAll('.nav-item'), function(button) {
         button.classList.toggle('active', button.getAttribute('data-page') === name);
       });
@@ -207,19 +287,17 @@
 
   function showLoginPage() {
     safeRender(function() {
-      var nav = document.getElementById('bottom-nav');
-      if (nav) nav.style.display = 'none';
       showPage('login');
+      syncHistoryState('login', 'replace');
     }, 'showLoginPage');
   }
 
   function showAppPage(name) {
     safeRender(function() {
-      var nav = document.getElementById('bottom-nav');
       var loginPage = document.getElementById('page-login');
-      if (nav) nav.style.display = 'flex';
       if (loginPage) loginPage.classList.remove('active');
       showPage(name);
+      syncHistoryState(name, 'replace');
     }, 'showAppPage:' + name);
   }
 
@@ -286,17 +364,65 @@
     removeFriend: function(userId, friendId) {
       return sb(function() { return supabase.from('friends').delete().match({ user_id: userId, friend_id: friendId }); });
     },
-    listMessages: function(userId) {
-      return sb(function() { return supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true }); });
+    listMessages: function() {
+      return sb(function() {
+        return supabase
+          .from('messages')
+          .select('id,client_id,user_id,content,created_at')
+          .order('created_at', { ascending: false });
+      }).then(function(res) {
+        if (res && res.error && isMissingMessageColumnError(res.error)) {
+          return sb(function() {
+            return supabase
+              .from('messages')
+              .select('id,content,created_at')
+              .order('created_at', { ascending: false });
+          });
+        }
+        return res;
+      });
     },
-    createMessage: function(userId, type, content) {
-      return sb(function() { return supabase.from('messages').insert({ type: type, content: content, user_id: userId }); });
+    createMessage: function(message) {
+      var normalized = normalizeMessage(message, 'pending');
+      var payload = {
+        client_id: normalized.client_id,
+        user_id: normalized.user_id,
+        content: normalized.content,
+        created_at: normalized.created_at
+      };
+      return sb(function() {
+        return supabase
+          .from('messages')
+          .insert(payload)
+          .select('id,client_id,user_id,content,created_at')
+          .single();
+      }).then(function(res) {
+        if (res && res.error && isMissingMessageColumnError(res.error)) {
+          return sb(function() {
+            return supabase
+              .from('messages')
+              .insert({
+                content: normalized.content,
+                created_at: normalized.created_at
+              })
+              .select('id,content,created_at')
+              .single();
+          });
+        }
+        if (res && res.error && isDuplicateMessageError(res.error) && normalized.client_id) {
+          return sb(function() {
+            return supabase
+              .from('messages')
+              .select('id,client_id,user_id,content,created_at')
+              .eq('client_id', normalized.client_id)
+              .single();
+          });
+        }
+        return res;
+      }).then(requireSupabaseSuccess);
     },
     deleteMessage: function(userId, id) {
       return sb(function() { return supabase.from('messages').delete().match({ id: id, user_id: userId }); });
-    },
-    listAllMessages: function() {
-      return sb(function() { return supabase.from('messages').select('*').order('created_at', { ascending: true }); });
     },
     deleteAnyMessage: function(id) {
       return sb(function() { return supabase.from('messages').delete().match({ id: id }); });
@@ -479,7 +605,8 @@
 
   function enterApp(user, message) {
     setCurrentUser(user);
-    showAppPage('me');
+    showAppPage('home');
+    subscribeMessagesRealtime();
     updateHome();
     showToast(message);
   }
@@ -1025,6 +1152,7 @@
 
   function renderMessages(messages) {
     var container = document.getElementById('messages');
+    if (!container) return;
     container.innerHTML = '';
     if (!messages.length) {
       container.innerHTML = '<div class="empty-state">还没有留言</div>';
@@ -1035,11 +1163,10 @@
       row.className = 'msg-row';
       var span = document.createElement('span');
       span.className = 'msg-content';
-      var senderName = appState.adminMode && message.user_id ? message.user_id : appState.user.name;
-      var sender = '<span class="msg-sender">' + (appState.user.avatar || '😀') + ' ' + senderName + '</span> ';
-      span.innerHTML = sender + (message.type === 'mood' ? '今天的心情：' + message.content : message.content) + '  [' + formatDate(message.created_at) + ']';
+      var syncText = message.sync_status === 'pending' ? ' · 待同步' : '';
+      span.textContent = (message.content || '') + '  [' + formatDate(message.created_at) + syncText + ']';
       row.appendChild(span);
-      if (appState.adminMode) {
+      if (appState.adminMode && message.id != null) {
         var button = document.createElement('button');
         button.className = 'delete-btn';
         button.title = '删除';
@@ -1053,13 +1180,44 @@
 
   function loadMessages() {
     if (!appState.user) return;
-    var userId = requireUserId();
-    var request = appState.adminMode ? SocialLayer.listAllMessages() : SocialLayer.listMessages(userId);
-    request.then(function(res) {
-      renderMessages(res.data || []);
-    }).catch(function() {
+    if (!supabase || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+      renderMessages([]);
+      showToast('无法连接留言服务');
+      return;
+    }
+    SocialLayer.listMessages().then(function(res) {
+      if (res && res.error) throw res.error;
+      renderMessages((res.data || []).map(function(message) {
+        return normalizeMessage(message, 'synced');
+      }));
+    }).catch(function(err) {
+      console.error('加载云端留言失败:', err);
       showToast('加载留言失败');
     });
+  }
+
+  function isMessagePageActive() {
+    var page = document.getElementById('page-message');
+    return !!(page && page.classList.contains('active'));
+  }
+
+  function subscribeMessagesRealtime() {
+    if (!supabase || messagesRealtimeChannel) return;
+    if (typeof supabase.channel !== 'function') return;
+    messagesRealtimeChannel = supabase
+      .channel('public:messages')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'messages'
+      }, function() {
+        if (isMessagePageActive()) loadMessages();
+      })
+      .subscribe(function(status) {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('messages realtime subscription status:', status);
+        }
+      });
   }
 
   function sendMessage() {
@@ -1073,9 +1231,15 @@
     var input = document.getElementById('userInput');
     var text = input.value.trim();
     if (!text) return;
-    SocialLayer.createMessage(userId, 'text', text).then(function() {
-      input.value = '';
-      loadMessages();
+    var message = normalizeMessage({
+      client_id: generateClientMessageId(),
+      user_id: userId,
+      content: text,
+      created_at: new Date().toISOString()
+    }, 'pending');
+    input.value = '';
+    SocialLayer.createMessage(message).then(function() {
+      if (isMessagePageActive()) loadMessages();
     }).catch(function(err) {
       console.error('发送留言失败:', err);
       showToast('发送失败');
@@ -1090,7 +1254,16 @@
       showToast(err.message);
       return;
     }
-    SocialLayer.createMessage(userId, 'mood', mood).then(loadMessages).catch(function() {
+    var message = normalizeMessage({
+      client_id: generateClientMessageId(),
+      user_id: userId,
+      content: '今天的心情：' + mood,
+      created_at: new Date().toISOString()
+    }, 'pending');
+    SocialLayer.createMessage(message).then(function() {
+      if (isMessagePageActive()) loadMessages();
+    }).catch(function(err) {
+      console.error('发送心情失败:', err);
       showToast('发送失败');
     });
   }
@@ -1101,14 +1274,15 @@
       showToast('只有管理员可以删除留言');
       return;
     }
-    SocialLayer.deleteAnyMessage(id).then(loadMessages).catch(function(err) {
+    SocialLayer.deleteAnyMessage(id).then(function() {
+      loadMessages();
+    }).catch(function(err) {
       console.error('删除留言失败:', err);
       showToast('删除失败');
     });
   }
 
-  function openPage(page) {
-    showPage(page);
+  function loadPageData(page) {
     if (page === 'home') updateHome();
     if (page === 'me') updateHome();
     if (page === 'pursuit') updateAdminStatus();
@@ -1117,6 +1291,15 @@
     if (page === 'warehouse') loadWarehouse();
     if (page === 'gacha') loadGachaRemain();
     if (page === 'message') loadMessages();
+  }
+
+  function openPage(page, options) {
+    options = options || {};
+    showPage(page);
+    loadPageData(page);
+    if (options.skipHistory !== true) {
+      syncHistoryState(page, isSubPage(page) ? 'push' : 'replace');
+    }
   }
 
   function enableAdminMode() {
@@ -1171,6 +1354,71 @@
     }, 'bindEnter:' + id);
   }
 
+  function handleHistoryPageChange(event) {
+    var state = event.state || {};
+    var page = state.page;
+    if (!page || !document.getElementById('page-' + page)) {
+      page = appState.user ? 'home' : 'login';
+    }
+    showPage(page);
+    loadPageData(page);
+  }
+
+  function bindBackNavigation() {
+    var back = document.getElementById('page-back');
+    if (back) {
+      back.onclick = function() {
+        window.history.back();
+      };
+    }
+    window.addEventListener('popstate', handleHistoryPageChange);
+  }
+
+  function bindSwipeBack() {
+    document.addEventListener('touchstart', function(event) {
+      if (!isSubPage(appState.currentPage) || !event.touches || event.touches.length !== 1) {
+        swipeBackState = null;
+        return;
+      }
+      var touch = event.touches[0];
+      if (touch.clientX > SWIPE_BACK_EDGE) {
+        swipeBackState = null;
+        return;
+      }
+      swipeBackState = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        deltaX: 0,
+        deltaY: 0,
+        tracking: true
+      };
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(event) {
+      if (!swipeBackState || !swipeBackState.tracking || !event.touches || event.touches.length !== 1) return;
+      var touch = event.touches[0];
+      swipeBackState.deltaX = touch.clientX - swipeBackState.startX;
+      swipeBackState.deltaY = touch.clientY - swipeBackState.startY;
+      if (swipeBackState.deltaX > 12 && Math.abs(swipeBackState.deltaY) < 40 && event.cancelable) {
+        event.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function() {
+      if (!swipeBackState || !swipeBackState.tracking) return;
+      var shouldBack = swipeBackState.deltaX >= SWIPE_BACK_THRESHOLD &&
+        Math.abs(swipeBackState.deltaY) <= 60;
+      swipeBackState = null;
+      if (shouldBack && isSubPage(appState.currentPage)) {
+        window.history.back();
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', function() {
+      swipeBackState = null;
+    }, { passive: true });
+  }
+
   function bindEvents() {
     safeRender(function() {
       bindClick('btn-login', login);
@@ -1213,6 +1461,11 @@
           var page = button.getAttribute('data-page');
           openPage(page);
         };
+      });
+      bindBackNavigation();
+      bindSwipeBack();
+      window.addEventListener('online', function() {
+        if (isMessagePageActive()) loadMessages();
       });
     }, 'bindEvents');
   }

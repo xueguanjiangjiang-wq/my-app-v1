@@ -264,15 +264,25 @@
     else window.history.replaceState(state, '', url);
   }
 
-  function clearAndBindBackButton() {
-    var back = document.querySelector('.back');
-    if (!back || !back.parentNode) return;
+  function rebuildBackButton(isSubPageState) {
+    eachNode(document.querySelectorAll('.back'), function(oldBack) {
+      oldBack.onclick = null;
+      oldBack.ontouchend = null;
+      if (oldBack.parentNode) oldBack.parentNode.removeChild(oldBack);
+    });
 
-    var freshBack = back.cloneNode(true);
-    back.parentNode.replaceChild(freshBack, back);
+    if (!document.body) return;
 
-    freshBack.onclick = Router.pop;
-    freshBack.ontouchend = Router.pop;
+    var back = document.createElement('button');
+    back.id = 'page-back';
+    back.className = 'page-back back';
+    back.type = 'button';
+    back.setAttribute('aria-label', '返回');
+    back.textContent = '‹ 返回';
+    back.style.display = isSubPageState ? 'inline-flex' : 'none';
+    back.onclick = Router.pop;
+    back.ontouchend = Router.pop;
+    document.body.insertBefore(back, document.body.firstChild);
   }
 
   function render() {
@@ -289,19 +299,19 @@
       if (target) target.classList.add('active');
       appState.currentPage = name;
 
-      var isSubPageState = isSubPage(name);
+      var isMobile = /Android|iPhone|iPad|iPod|Mobile|MicroMessenger/i.test(navigator.userAgent) ||
+        ('ontouchstart' in window);
+      var isSubPageState = Router.stack.length > 0;
+      console.log("render triggered", isMobile, Router.stack.length);
       var nav = document.getElementById('bottom-nav');
-      var back = document.querySelector('.back');
 
       if (document.body) document.body.classList.toggle('is-sub-page', isSubPageState);
       if (nav) nav.style.display = name !== 'login' && !isSubPageState ? 'flex' : 'none';
-      if (back) back.style.display = isSubPageState ? 'inline-flex' : 'none';
+      rebuildBackButton(isSubPageState);
 
       eachNode(document.querySelectorAll('.nav-item'), function(button) {
         button.classList.toggle('active', button.getAttribute('data-page') === name);
       });
-
-      clearAndBindBackButton();
     }, 'render');
   }
 
@@ -342,15 +352,6 @@
         render();
       }
     };
-  }
-
-  function setNavigationChrome(name) {
-    var nav = document.getElementById('bottom-nav');
-    var back = document.getElementById('page-back');
-    var subPage = isSubPage(name);
-    if (document.body) document.body.classList.toggle('is-sub-page', subPage);
-    if (nav) nav.style.display = name !== 'login' && !subPage ? 'flex' : 'none';
-    if (back) back.style.display = subPage ? 'inline-flex' : 'none';
   }
 
   function showPage(name) {

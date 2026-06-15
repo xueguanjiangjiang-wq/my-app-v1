@@ -77,17 +77,24 @@ body.is-sub-page .page.active {
   position: fixed;
   top: calc(10px + env(safe-area-inset-top));
   left: max(14px, calc((100vw - 480px) / 2 + 14px));
-  z-index: 150;
+  z-index: 10000;
   display: none;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   border: none;
   background: rgba(242,242,247,0.88);
   color: var(--accent);
   border-radius: 999px;
-  padding: 8px 12px 8px 10px;
+  padding: 10px 14px 10px 12px;
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }

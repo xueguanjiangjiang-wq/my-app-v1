@@ -28,9 +28,9 @@
   var SUPABASE_RETRY_LIMIT = 2;
   var TOP_LEVEL_PAGES = {
     home: true,
-    gacha: true,
-    message: true,
-    pursuit: true
+    discover: true,
+    search: true,
+    warehouse: true
   };
   var SWIPE_BACK_EDGE = 32;
   var SWIPE_BACK_THRESHOLD = 80;
@@ -54,12 +54,8 @@
     if (!container) return;
     container.innerHTML =
       '<div id="page-home" class="page active">' +
-        '<h1>探索</h1>' +
+        '<h1>主页</h1>' +
         '<p class="gacha-desc">页面加载中，请稍候...</p>' +
-        '<div class="entry-list">' +
-          '<button class="entry-item" type="button"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>' +
-          '<button class="entry-item" type="button"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>' +
-        '</div>' +
       '</div>';
   }
 
@@ -280,23 +276,23 @@
     var items = [
       {
         page: 'home',
-        label: '首页',
+        label: '主页',
         icon: '<svg viewBox="0 0 24 24"><path d="M4.5 11.2 12 4.8l7.5 6.4"/><path d="M6.5 10.3v8.9h11v-8.9"/><path d="M10 19.2v-5h4v5"/></svg>'
       },
       {
-        page: 'gacha',
-        label: '抽卡',
-        icon: '<svg viewBox="0 0 24 24"><path d="M7.5 4.5h9a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>'
+        page: 'discover',
+        label: '新发现',
+        icon: '<svg viewBox="0 0 24 24"><path d="M12 4.2l1.8 5.1 5.4 1.1-4.1 3.6.7 5.4-4.8-2.7-4.8 2.7.7-5.4-4.1-3.6 5.4-1.1L12 4.2Z"/></svg>'
       },
       {
-        page: 'message',
-        label: '留言',
-        icon: '<svg viewBox="0 0 24 24"><path d="M5 6.5h14v9.2H9.1L5 19.2V6.5Z"/><path d="M8.5 10h7"/><path d="M8.5 13h4.5"/></svg>'
+        page: 'search',
+        label: '搜索',
+        icon: '<svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="5.9"/><path d="m15.4 15.4 4.2 4.2"/></svg>'
       },
       {
-        page: 'pursuit',
-        label: '设置',
-        icon: '<svg viewBox="0 0 24 24"><path d="M12 3.8v3.1"/><path d="M12 17.1v3.1"/><path d="M20.2 12h-3.1"/><path d="M6.9 12H3.8"/><path d="m17.8 6.2-2.2 2.2"/><path d="m8.4 15.6-2.2 2.2"/><path d="m17.8 17.8-2.2-2.2"/><path d="m8.4 8.4-2.2-2.2"/><circle cx="12" cy="12" r="3.4"/></svg>'
+        page: 'warehouse',
+        label: '资料库',
+        icon: '<svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v15h-13Z"/><path d="M8.5 8.8h7"/><path d="M8.5 12h7"/><path d="M8.5 15.2h4.8"/></svg>'
       }
     ];
     return '<nav id="bottom-nav" class="bottom-nav">' + items.map(function(item) {
@@ -305,6 +301,14 @@
         '<span class="nav-label">' + item.label + '</span>' +
         '</button>';
     }).join('') + '</nav>';
+  }
+
+  function getUserAvatarButtonHtml() {
+    if (!appState.user) return '';
+    var avatar = appState.user.avatar || '😀';
+    return '<button id="user-avatar-button" class="user-avatar-button" type="button" aria-label="进入个人主页和设置">' +
+      avatar +
+      '</button>';
   }
 
   function getPageHtml(name) {
@@ -326,17 +330,19 @@
     }
     if (name === 'home') {
       return '<div id="page-home" class="page active">' +
-        '<h1>探索</h1>' +
-        '<p class="gacha-desc">发现和管理你的卡牌资产</p>' +
-        '<div class="entry-list">' +
-          '<button class="entry-item" data-open-page="gacha"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>' +
-          '<button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>只看已收藏卡牌</small></button>' +
-          '<button class="entry-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>仓库</span><small>查看全部持有卡牌</small></button>' +
-          '<button class="entry-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>' +
-          '<button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><small>好友与关系</small></button>' +
+        '<h1>主页</h1>' +
+        '<p class="gacha-desc">你的个人名片</p>' +
+        '<div class="profile-card home-profile-card">' +
+          '<div id="home-avatar" class="profile-avatar"></div>' +
+          '<div class="home-profile-main">' +
+            '<h2 id="home-name"></h2>' +
+            '<p class="user-id">ID: <span id="home-id"></span></p>' +
+            '<div class="stats-row home-stats-row">' +
+              '<div class="stat-item"><span class="stat-num" id="home-stat-collection">0</span><span class="stat-label">资料</span></div>' +
+              '<div class="stat-item"><span class="stat-num" id="home-stat-friends">0</span><span class="stat-label">关系</span></div>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="section-title">最近获得</div>' +
-        '<div id="home-recent-cards" class="card-list"></div>' +
       '</div>';
     }
     if (name === 'me') {
@@ -357,6 +363,28 @@
           '<button class="menu-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>卡牌作品</span><b>›</b></button>' +
           '<button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-face"></i>表情</span><b>›</b></button>' +
           '<button class="menu-item" data-open-page="pursuit"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (name === 'discover') {
+      return '<div id="page-discover" class="page active">' +
+        '<h1>新发现</h1>' +
+        '<p class="gacha-desc">发现新的卡牌、收藏和关系</p>' +
+        '<div class="entry-list">' +
+          '<button class="entry-item" data-open-page="gacha"><span><i class="flat-icon icon-card"></i>抽卡</span><small>抽取新的社交资产</small></button>' +
+          '<button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>查看你收藏的卡牌</small></button>' +
+          '<button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><small>好友与关系</small></button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (name === 'search') {
+      return '<div id="page-search" class="page active">' +
+        '<h1>搜索</h1>' +
+        '<p class="gacha-desc">快速进入留言、好友和卡牌资料</p>' +
+        '<div class="entry-list">' +
+          '<button class="entry-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言</span><small>查看朋友圈留言</small></button>' +
+          '<button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>好友</span><small>通过 user_id 添加好友</small></button>' +
+          '<button class="entry-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>资料库</span><small>检索已持有卡牌</small></button>' +
         '</div>' +
       '</div>';
     }
@@ -392,10 +420,9 @@
     if (name === 'gacha') {
       return '<div id="page-gacha" class="page active">' +
         '<h1>抽卡</h1>' +
-        '<p class="gacha-desc">点击下方按钮抽取随机卡牌</p>' +
-        '<p class="gacha-remain" id="gacha-remain">今日抽卡: 0/3</p>' +
-        '<div class="gacha-area"><div id="gacha-result" class="gacha-result"><span class="placeholder">等待抽卡...</span></div></div>' +
-        '<button id="btn-gacha" class="btn-gacha">开始抽卡！</button>' +
+        '<p class="gacha-desc">每天三张牌，点击未翻开的牌抽取</p>' +
+        '<p class="gacha-remain" id="gacha-remain">今日剩余: 3/3</p>' +
+        '<div class="gacha-area"><div id="gacha-result" class="gacha-result gacha-spread"></div></div>' +
       '</div>';
     }
     if (name === 'collection') {
@@ -469,6 +496,7 @@
 
       container.innerHTML =
         (isSubPage ? '<button id="page-back" class="page-back back" type="button" aria-label="返回">‹</button>' : '') +
+        (name !== 'login' && name !== 'me' ? getUserAvatarButtonHtml() : '') +
         getPageHtml(name) +
         (!isSubPage && name !== 'login' ? getBottomNavHtml(name) : '');
 
@@ -795,11 +823,11 @@
     { rarity: 'UR', weight: 1 }
   ];
   var CARD_IMAGES = {
-    N: '/icon-192.png',
-    R: '/icon-192.png',
-    SR: '/icon-192.png',
-    SSR: '/icon-512.png',
-    UR: '/icon-512.png'
+    N: '',
+    R: '',
+    SR: '',
+    SSR: '',
+    UR: ''
   };
   var CARD_NAMES = {
     N: ['星星','月亮','花朵','树叶','小溪','微风','白云','小鸟','小鱼','小草','露珠','彩虹','蝴蝶','蜜蜂','蜗牛','蘑菇'],
@@ -893,44 +921,34 @@
       setText('me-avatar', appState.user.avatar || '😀');
       setText('me-name', appState.user.name);
       setText('me-id', userId);
+      setText('home-avatar', appState.user.avatar || '😀');
+      setText('home-name', appState.user.name);
+      setText('home-id', userId);
       updateAdminStatus();
     }, 'updateHome:profile');
 
     AssetLayer.listCards(userId).then(function(res) {
       safeRender(function() {
-        setText('stat-collection', (res.data || []).length);
+        var total = (res.data || []).length;
+        setText('stat-collection', total);
+        setText('home-stat-collection', total);
       }, 'updateHome:cards');
     }).catch(function() {
       setText('stat-collection', '0');
+      setText('home-stat-collection', '0');
     });
 
     SocialLayer.listFriends(userId).then(function(res) {
       safeRender(function() {
-        setText('stat-friends', (res.data || []).length);
+        var total = (res.data || []).length;
+        setText('stat-friends', total);
+        setText('home-stat-friends', total);
       }, 'updateHome:friends');
     }).catch(function() {
       setText('stat-friends', '0');
+      setText('home-stat-friends', '0');
     });
 
-    AssetLayer.recentCards(userId).then(function(res) {
-      safeRender(function() {
-        var container = document.getElementById('home-recent-cards');
-        if (!container) return;
-        container.innerHTML = '';
-        if (!res.data || !res.data.length) {
-          container.innerHTML = '<div class="empty-state">还没有收藏，去抽卡吧！</div>';
-          return;
-        }
-        res.data.forEach(function(card) {
-          container.appendChild(createCardItem(card));
-        });
-      }, 'updateHome:recentCards');
-    }).catch(function() {
-      safeRender(function() {
-        var container = document.getElementById('home-recent-cards');
-        if (container) container.innerHTML = '<div class="empty-state">加载失败</div>';
-      }, 'updateHome:recentCardsError');
-    });
   }
 
   function setText(id, value) {
@@ -940,21 +958,32 @@
     }, 'setText:' + id);
   }
 
+  function shouldRenderCardImage(image) {
+    if (!image) return false;
+    return image.indexOf('/icon-192.png') === -1 && image.indexOf('/icon-512.png') === -1;
+  }
+
   function createCardItem(card) {
     var el = document.createElement('div');
     el.className = 'card-item';
     var ownerId = card.owner_id || card.user_id || '';
-    var image = card.image || CARD_IMAGES[card.rarity] || '/icon-192.png';
+    var image = card.image || CARD_IMAGES[card.rarity] || '';
+    var imageHtml = shouldRenderCardImage(image)
+      ? '<img class="card-asset-image" src="' + image + '" alt="' + (card.name || 'card') + '">'
+      : '';
     el.innerHTML =
-      '<img class="card-asset-image" src="' + image + '" alt="' + (card.name || 'card') + '">' +
-      '<div class="card-rarity rarity-' + card.rarity + '">' + card.rarity + '</div>' +
-      '<div class="card-asset-info">' +
-      '<span class="card-name">' + (card.name || '') + '</span>' +
-      '<span class="card-owner">归属: ' + ownerId + '</span>' +
-      '<span class="card-owner">trade_id: ' + (card.trade_id || '待生成') + '</span>' +
-      '<span class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</span>' +
+      '<div class="card-visual">' +
+        imageHtml +
+        '<div class="card-rarity rarity-' + card.rarity + '">' + card.rarity + '</div>' +
       '</div>' +
-      '<span class="card-time">' + formatDate(card.created_at) + '</span>';
+      '<div class="card-asset-info">' +
+        '<span class="card-name">' + (card.name || '') + '</span>' +
+        '<span class="card-time">' + formatDate(card.created_at) + '</span>' +
+        '<div class="card-meta"><span class="card-meta-label">归属</span><span class="card-meta-value">' + ownerId + '</span></div>' +
+        '<div class="card-meta"><span class="card-meta-label">trade_id</span><span class="card-meta-value">' + (card.trade_id || '待生成') + '</span></div>' +
+        '<div class="card-meta"><span class="card-meta-label">交易</span><span class="card-meta-value">' + Number(card.trade_count || 0) + '</span></div>' +
+      '</div>' +
+      '<div class="card-actions"></div>';
     return el;
   }
 
@@ -1134,9 +1163,7 @@
 
   function renderGachaResult(card, userId) {
     var ownerId = card.owner_id || card.user_id || userId;
-    var image = card.image || CARD_IMAGES[card.rarity] || '/icon-192.png';
     return '<div class="result-details">' +
-      '<img class="card-asset-image card-asset-image-large" src="' + image + '" alt="' + card.name + '">' +
       '<div class="card-rarity rarity-' + card.rarity + '" style="width:50px;height:50px;font-size:16px;border-radius:12px;margin-bottom:10px;">' + card.rarity + '</div>' +
       '<div class="result-name">' + card.name + '</div>' +
       '<div class="result-rarity rarity-' + card.rarity + '" style="padding:4px 12px;border-radius:8px;">' + card.rarity + ' 稀有</div>' +
@@ -1146,48 +1173,67 @@
       '</div>';
   }
 
-  function renderGachaBacks(cards, userId, onAllFlipped) {
+  function getTodayKey() {
+    var now = new Date();
+    return now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+  }
+
+  function getTodayGachaKey(userId) {
+    return 'gacha_' + userId + '_' + getTodayKey();
+  }
+
+  function getTodayGachaUsed(userId) {
+    var used = Number(localStorage.getItem(getTodayGachaKey(userId)) || 0);
+    if (!Number.isFinite(used) || used < 0) return 0;
+    return Math.min(DAILY_GACHA_LIMIT, used);
+  }
+
+  function setTodayGachaUsed(userId, used) {
+    var nextUsed = Math.max(0, Math.min(DAILY_GACHA_LIMIT, Number(used || 0)));
+    localStorage.setItem(getTodayGachaKey(userId), String(nextUsed));
+    return nextUsed;
+  }
+
+  function getTodayGachaRemaining(userId) {
+    return Math.max(0, DAILY_GACHA_LIMIT - getTodayGachaUsed(userId));
+  }
+
+  function renderGachaSlots(remaining) {
     var resultEl = document.getElementById('gacha-result');
-    var flippedCount = 0;
+    if (!resultEl) return;
+    var remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, Number(remaining || 0)));
+    var usedCount = DAILY_GACHA_LIMIT - remain;
     resultEl.classList.remove('flipped');
     resultEl.classList.add('gacha-spread');
     resultEl.innerHTML = '';
-    cards.forEach(function(card, index) {
+    for (var index = 0; index < DAILY_GACHA_LIMIT; index += 1) {
+      var isUsed = index < usedCount;
       var slot = document.createElement('button');
       slot.type = 'button';
-      slot.className = 'gacha-flip-card';
-      slot.innerHTML =
-        '<div class="gacha-flip-inner">' +
-        '<div class="gacha-face gacha-back"><span>卡牌</span><small>点击翻开</small></div>' +
-        '<div class="gacha-face gacha-front">' + renderGachaResult(card, userId) + '</div>' +
+      slot.className = 'gacha-flip-card' + (isUsed ? ' is-used' : '');
+      slot.disabled = isUsed;
+      slot.setAttribute('aria-label', isUsed ? '今日已抽取' : '点击抽取卡牌');
+      slot.innerHTML = '<div class="gacha-flip-inner">' +
+        '<div class="gacha-face gacha-back">' +
+          '<span>' + (isUsed ? '已抽' : '卡牌') + '</span>' +
+          '<small>' + (isUsed ? '今日已使用' : '点击翻开') + '</small>' +
+        '</div>' +
         '</div>';
-      slot.onclick = function() {
-        if (slot.classList.contains('revealed')) return;
-        slot.classList.add('revealed');
-        flippedCount += 1;
-        if (flippedCount === cards.length) onAllFlipped();
-      };
+      if (!isUsed) {
+        slot.onclick = function() {
+          drawGachaSlot(this);
+        };
+      }
       resultEl.appendChild(slot);
-    });
+    }
   }
 
   function renderGachaUI(remaining) {
     var remain = Number(remaining || 0);
     var label = document.getElementById('gacha-remain');
-    var button = document.getElementById('btn-gacha');
-    if (appState.adminMode) {
-      if (label) label.textContent = '管理员模式：无限抽卡';
-      if (button) {
-        button.disabled = false;
-        button.textContent = '开始抽卡！（管理员无限）';
-      }
-      return;
-    }
-    if (label) label.textContent = '剩余次数: ' + remain + '/' + DAILY_GACHA_LIMIT;
-    if (button) {
-      button.disabled = remain <= 0;
-      button.textContent = remain <= 0 ? '次数已耗尽' : '开始抽卡！（剩余 ' + remain + ' 次）';
-    }
+    remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, remain));
+    if (label) label.textContent = remain <= 0 ? '今日已抽完: 0/3' : '今日剩余: ' + remain + '/' + DAILY_GACHA_LIMIT;
+    renderGachaSlots(remain);
   }
 
   function loadGachaRemain() {
@@ -1195,18 +1241,10 @@
       renderGachaUI(0);
       return;
     }
-    if (appState.adminMode) {
-      renderGachaUI(DAILY_GACHA_LIMIT);
-      return;
-    }
-    UserCore.getGachaRemaining(requireUserId()).then(renderGachaUI).catch(function(err) {
-      console.error('加载抽卡次数失败:', err);
-      renderGachaUI(0);
-      showToast('加载次数失败');
-    });
+    renderGachaUI(getTodayGachaRemaining(requireUserId()));
   }
 
-  function runGacha() {
+  function drawGachaSlot(slot) {
     if (appState.isDrawing) return;
     var userId;
     try {
@@ -1216,58 +1254,63 @@
       return;
     }
 
-    var remainingRequest = appState.adminMode ? Promise.resolve(DAILY_GACHA_LIMIT) : UserCore.getGachaRemaining(userId);
-    remainingRequest.then(function(remaining) {
-      if (remaining <= 0) {
-        showToast('次数已耗尽');
-        renderGachaUI(0);
-        return;
-      }
+    var remaining = getTodayGachaRemaining(userId);
+    if (remaining <= 0) {
+      showToast('今日次数已用完');
+      renderGachaUI(0);
+      return;
+    }
 
-      var nextRemaining = Math.max(0, remaining - 1);
-      var resultEl = document.getElementById('gacha-result');
-      var cards = [drawCard(), drawCard(), drawCard()];
-      var cardsSaved = false;
-      appState.isDrawing = true;
+    appState.isDrawing = true;
+    slot.disabled = true;
+    slot.classList.add('is-saving');
+    slot.querySelector('.gacha-back small').textContent = '抽取中...';
 
-      renderGachaBacks(cards, userId, function() {
-        AssetLayer.createCards(userId, cards).then(function(res) {
-          cardsSaved = true;
-          cards = res.data && res.data.length ? res.data : cards;
-          renderGachaBacks(cards, userId, function() {});
-          eachNode(document.querySelectorAll('.gacha-flip-card'), function(slot) {
-            slot.classList.add('revealed');
-            slot.disabled = true;
-          });
-          if (appState.adminMode) return Promise.resolve(remaining);
-          return UserCore.setGachaRemaining(userId, nextRemaining);
-        }).then(function(savedRemaining) {
-          renderGachaUI(savedRemaining);
-          showToast('已获得 3 张卡牌');
-          updateHome();
-          appState.isDrawing = false;
-        }).catch(function(err) {
-          console.error('抽卡保存失败:', err);
-          loadGachaRemain();
-          if (isMissingUserError(err)) {
-            handleMissingUserSession();
-            appState.isDrawing = false;
-            return;
-          }
-          if (cardsSaved) {
-            updateHome();
-            showToast('卡牌已保存，但次数扣减失败: ' + getErrorMessage(err));
-          } else {
-            showToast('保存失败: ' + getErrorMessage(err));
-          }
-          appState.isDrawing = false;
-        });
+    var card = drawCard();
+    AssetLayer.createCards(userId, [card]).then(function(res) {
+      var savedCard = res.data && res.data.length ? res.data[0] : card;
+      var used = setTodayGachaUsed(userId, getTodayGachaUsed(userId) + 1);
+      var nextRemaining = DAILY_GACHA_LIMIT - used;
+      slot.classList.remove('is-saving');
+      slot.disabled = true;
+      slot.innerHTML = '<div class="gacha-flip-inner">' +
+        '<div class="gacha-face gacha-back"><span>卡牌</span><small>已翻开</small></div>' +
+        '<div class="gacha-face gacha-front">' + renderGachaResult(savedCard, userId) + '</div>' +
+        '</div>';
+      requestAnimationFrame(function() {
+        slot.classList.add('revealed');
       });
+      renderGachaStatus(nextRemaining);
+      UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
+        console.warn('同步抽卡次数失败:', err);
+      });
+      showToast('已获得 1 张卡牌');
+      updateHome();
+      appState.isDrawing = false;
     }).catch(function(err) {
-      console.error('抽卡失败:', err);
-      showToast('抽卡失败: ' + getErrorMessage(err));
+      console.error('抽卡保存失败:', err);
+      slot.disabled = false;
+      slot.classList.remove('is-saving');
+      slot.querySelector('.gacha-back small').textContent = '点击翻开';
+      if (isMissingUserError(err)) handleMissingUserSession();
+      else showToast('保存失败: ' + getErrorMessage(err));
       appState.isDrawing = false;
     });
+  }
+
+  function renderGachaStatus(remaining) {
+    var label = document.getElementById('gacha-remain');
+    var remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, Number(remaining || 0)));
+    if (label) label.textContent = remain <= 0 ? '今日已抽完: 0/3' : '今日剩余: ' + remain + '/' + DAILY_GACHA_LIMIT;
+    if (remain <= 0) {
+      eachNode(document.querySelectorAll('.gacha-flip-card:not(.revealed)'), function(slot) {
+        slot.disabled = true;
+        slot.classList.add('is-used');
+        slot.innerHTML = '<div class="gacha-flip-inner">' +
+          '<div class="gacha-face gacha-back"><span>已抽</span><small>今日已使用</small></div>' +
+          '</div>';
+      });
+    }
   }
 
   function loadCollection() {
@@ -1308,7 +1351,8 @@
             if (e.target && e.target.tagName === 'BUTTON') return;
             toggleCardFavorite(card, true);
           };
-          item.appendChild(createFavoriteButton(card, true));
+          var actions = item.querySelector('.card-actions');
+          if (actions) actions.appendChild(createFavoriteButton(card, true));
           container.appendChild(item);
         });
       }, 'loadCollection');
@@ -1364,7 +1408,8 @@
           if (e.target && e.target.tagName === 'BUTTON') return;
           toggleCardFavorite(card, false);
         };
-        item.appendChild(createFavoriteButton(card, false));
+        var actions = item.querySelector('.card-actions');
+        if (actions) actions.appendChild(createFavoriteButton(card, false));
         var tradeButton = document.createElement('button');
         tradeButton.className = 'card-trade';
         tradeButton.textContent = Number(card.trade_count || 0) >= 1 ? '已交易' : '复制 trade_id';
@@ -1387,8 +1432,10 @@
             showToast('删除失败');
           });
         };
-        item.appendChild(tradeButton);
-        item.appendChild(del);
+        if (actions) {
+          actions.appendChild(tradeButton);
+          actions.appendChild(del);
+        }
         container.appendChild(item);
       });
     }).catch(function(err) {
@@ -1674,7 +1721,6 @@
       bindEnter('login-name', login);
       bindClick('btn-add-friend', addFriend);
       bindEnter('friend-id-input', addFriend);
-      bindClick('btn-gacha', runGacha);
       bindClick('btn-show-admin', function() {
         appState.adminPanelOpen = !appState.adminPanelOpen;
         render();
@@ -1684,6 +1730,9 @@
       bindEnter('admin-password-input', enableAdminMode);
       bindClick('btn-claim-trade', claimTradeCode);
       bindEnter('trade-code-input', claimTradeCode);
+      bindClick('user-avatar-button', function() {
+        openPage('me', { forceSubPage: true });
+      });
       bindClick('myBtn', function() {
         appState.messageComposeOpen = true;
         render();

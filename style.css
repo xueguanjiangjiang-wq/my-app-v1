@@ -65,6 +65,9 @@ body {
 body.is-sub-page {
   padding-bottom: 0;
 }
+body.is-login-page {
+  padding-bottom: 0;
+}
 
 /* 页面切换 */
 .page { display: none; padding: 20px; min-height: 100vh; }
@@ -158,6 +161,9 @@ body.is-sub-page .page-back {
   padding-bottom: env(safe-area-inset-bottom);
 }
 body.is-sub-page .bottom-nav {
+  display: none !important;
+}
+body.is-login-page .bottom-nav {
   display: none !important;
 }
 .nav-item {

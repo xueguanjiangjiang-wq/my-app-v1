@@ -248,16 +248,11 @@
     return !!TOP_LEVEL_PAGES[name];
   }
 
-  function isSubPage(name) {
-    return !!(Router && Router.stack.length > 0);
-  }
-
   function syncHistoryState(name, mode) {
     if (!window.history || !window.history.pushState) return;
     var state = {
       page: name,
-      stack: Router ? Router.stack.slice() : [],
-      isSubPage: !!(Router && Router.stack.length > 0)
+      stack: Router ? Router.stack.slice() : []
     };
     var url = '#/' + name;
     if (mode === 'push') window.history.pushState(state, '', url);
@@ -279,7 +274,6 @@
     back.type = 'button';
     back.setAttribute('aria-label', '返回');
     back.textContent = '‹ 返回';
-    back.style.display = isSubPageState ? 'inline-flex' : 'none';
     back.onclick = Router.pop;
     back.ontouchend = Router.pop;
     document.body.insertBefore(back, document.body.firstChild);
@@ -299,15 +293,14 @@
       if (target) target.classList.add('active');
       appState.currentPage = name;
 
-      var isMobile = /Android|iPhone|iPad|iPod|Mobile|MicroMessenger/i.test(navigator.userAgent) ||
-        ('ontouchstart' in window);
-      var isSubPageState = Router.stack.length > 0;
-      console.log("render triggered", isMobile, Router.stack.length);
-      var nav = document.getElementById('bottom-nav');
+      var isSubPage = Router.stack.length > 0;
+      console.log("render:", isSubPage, Router.stack.length);
 
-      if (document.body) document.body.classList.toggle('is-sub-page', isSubPageState);
-      if (nav) nav.style.display = name !== 'login' && !isSubPageState ? 'flex' : 'none';
-      rebuildBackButton(isSubPageState);
+      if (document.body) {
+        document.body.classList.toggle('is-sub-page', isSubPage);
+        document.body.classList.toggle('is-login-page', name === 'login');
+      }
+      rebuildBackButton(isSubPage);
 
       eachNode(document.querySelectorAll('.nav-item'), function(button) {
         button.classList.toggle('active', button.getAttribute('data-page') === name);
@@ -1454,7 +1447,7 @@
 
   function bindSwipeBack() {
     document.addEventListener('touchstart', function(event) {
-      if (!isSubPage(appState.currentPage) || !event.touches || event.touches.length !== 1) {
+      if (!Router || Router.stack.length <= 0 || !event.touches || event.touches.length !== 1) {
         swipeBackState = null;
         return;
       }
@@ -1487,7 +1480,7 @@
       var shouldBack = swipeBackState.deltaX >= SWIPE_BACK_THRESHOLD &&
         Math.abs(swipeBackState.deltaY) <= 60;
       swipeBackState = null;
-      if (shouldBack && isSubPage(appState.currentPage)) {
+      if (shouldBack && Router && Router.stack.length > 0) {
         Router.pop();
       }
     }, { passive: true });

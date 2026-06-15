@@ -49,12 +49,27 @@
   var lastBackTouchTime = 0;
   var Router = null;
 
+  function renderFallbackHome() {
+    var container = document.getElementById('app');
+    if (!container) return;
+    container.innerHTML =
+      '<div id="page-home" class="page active">' +
+        '<h1>探索</h1>' +
+        '<p class="gacha-desc">页面加载中，请稍候...</p>' +
+        '<div class="entry-list">' +
+          '<button class="entry-item" type="button"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>' +
+          '<button class="entry-item" type="button"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>' +
+        '</div>' +
+      '</div>';
+  }
+
   function recoverFromFatalError() {
     var run = function() {
       safeRender(function() {
         hideLoading();
         if (!Router) initRouter();
-        if (!Router.current) showLoginPage();
+        if (!Router.current) Router.current = appState.user ? 'home' : 'login';
+        render();
       }, 'recoverFromFatalError');
     };
     if (document.readyState === 'loading') {
@@ -432,8 +447,13 @@
   }
 
   function render() {
-    safeRender(function() {
-      var name = Router ? Router.current : appState.currentPage;
+    console.log("render running");
+    try {
+      if (!Router) initRouter();
+      if (!Router.stack) Router.stack = [];
+      if (!Router.current) Router.current = appState.user ? 'home' : 'login';
+
+      var name = Router.current;
       var container = document.getElementById('app');
       if (!container) return;
       appState.currentPage = name;
@@ -452,13 +472,18 @@
         getPageHtml(name) +
         (!isSubPage && name !== 'login' ? getBottomNavHtml(name) : '');
 
+      if (!container.innerHTML) renderFallbackHome();
+
       var backBtn = document.querySelector('.back');
       if (backBtn) {
         backBtn.onclick = Router.pop;
         backBtn.ontouchend = Router.pop;
       }
       bindRenderedEvents();
-    }, 'render');
+    } catch (err) {
+      console.error('render failed:', err);
+      renderFallbackHome();
+    }
   }
 
   function initRouter() {
@@ -1696,6 +1721,10 @@
   function initApp() {
     try {
       hideLoading();
+      if (!Router) initRouter();
+      Router.current = appState.user ? 'home' : 'login';
+      Router.stack = [];
+      render();
       bindEvents();
       registerServiceWorker();
       restoreSession().then(function(user) {
@@ -1731,6 +1760,15 @@
     }
     initApp();
   }
+
+  window.addEventListener('load', function() {
+    var container = document.getElementById('app');
+    if (container && !container.innerHTML.trim()) {
+      if (!Router) initRouter();
+      if (!Router.current) Router.current = 'home';
+      render();
+    }
+  });
 
   startAppWhenReady();
 })();

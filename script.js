@@ -40,6 +40,8 @@
     selectedAvatar: '😀',
     isDrawing: false,
     adminMode: false,
+    adminPanelOpen: false,
+    messageComposeOpen: false,
     currentPage: 'login'
   };
   var messagesRealtimeChannel = null;
@@ -51,8 +53,8 @@
     var run = function() {
       safeRender(function() {
         hideLoading();
-        var hasActivePage = document.querySelector('.page.active');
-        if (!hasActivePage) showLoginPage();
+        if (!Router) initRouter();
+        if (!Router.current) showLoginPage();
       }, 'recoverFromFatalError');
     };
     if (document.readyState === 'loading') {
@@ -259,52 +261,203 @@
     else window.history.replaceState(state, '', url);
   }
 
-  function rebuildBackButton(isSubPageState) {
-    eachNode(document.querySelectorAll('.back'), function(oldBack) {
-      oldBack.onclick = null;
-      oldBack.ontouchend = null;
-      if (oldBack.parentNode) oldBack.parentNode.removeChild(oldBack);
-    });
+  function getBottomNavHtml(currentPage) {
+    var items = [
+      {
+        page: 'home',
+        label: '首页',
+        icon: '<svg viewBox="0 0 24 24"><path d="M4.5 11.2 12 4.8l7.5 6.4"/><path d="M6.5 10.3v8.9h11v-8.9"/><path d="M10 19.2v-5h4v5"/></svg>'
+      },
+      {
+        page: 'gacha',
+        label: '抽卡',
+        icon: '<svg viewBox="0 0 24 24"><path d="M7.5 4.5h9a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>'
+      },
+      {
+        page: 'message',
+        label: '留言',
+        icon: '<svg viewBox="0 0 24 24"><path d="M5 6.5h14v9.2H9.1L5 19.2V6.5Z"/><path d="M8.5 10h7"/><path d="M8.5 13h4.5"/></svg>'
+      },
+      {
+        page: 'pursuit',
+        label: '设置',
+        icon: '<svg viewBox="0 0 24 24"><path d="M12 3.8v3.1"/><path d="M12 17.1v3.1"/><path d="M20.2 12h-3.1"/><path d="M6.9 12H3.8"/><path d="m17.8 6.2-2.2 2.2"/><path d="m8.4 15.6-2.2 2.2"/><path d="m17.8 17.8-2.2-2.2"/><path d="m8.4 8.4-2.2-2.2"/><circle cx="12" cy="12" r="3.4"/></svg>'
+      }
+    ];
+    return '<nav id="bottom-nav" class="bottom-nav">' + items.map(function(item) {
+      return '<button class="nav-item' + (item.page === currentPage ? ' active' : '') + '" data-page="' + item.page + '">' +
+        '<span class="nav-icon" aria-hidden="true">' + item.icon + '</span>' +
+        '<span class="nav-label">' + item.label + '</span>' +
+        '</button>';
+    }).join('') + '</nav>';
+  }
 
-    if (!document.body) return;
-
-    var back = document.createElement('button');
-    back.id = 'page-back';
-    back.className = 'page-back back';
-    back.type = 'button';
-    back.setAttribute('aria-label', '返回');
-    back.textContent = '‹ 返回';
-    back.onclick = Router.pop;
-    back.ontouchend = Router.pop;
-    document.body.insertBefore(back, document.body.firstChild);
+  function getPageHtml(name) {
+    if (name === 'login') {
+      return '<div id="page-login" class="page active">' +
+        '<div class="login-container">' +
+          '<h1>🎴 蒋的APP</h1>' +
+          '<p class="subtitle">关系 · 收藏 · 名片</p>' +
+          '<div class="form-group">' +
+            '<input type="text" id="login-name" placeholder="输入你的名字（昵称）" maxlength="20" autocomplete="off">' +
+          '</div>' +
+          '<div class="avatar-picker">' +
+            '<p>选择头像：</p>' +
+            '<div class="avatar-grid" id="avatar-grid"></div>' +
+          '</div>' +
+          '<button id="btn-login" class="btn-primary">进入系统</button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (name === 'home') {
+      return '<div id="page-home" class="page active">' +
+        '<h1>探索</h1>' +
+        '<p class="gacha-desc">发现和管理你的卡牌资产</p>' +
+        '<div class="entry-list">' +
+          '<button class="entry-item" data-open-page="gacha"><span><i class="flat-icon icon-card"></i>抽卡</span><small>社交资产抽卡</small></button>' +
+          '<button class="entry-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><small>只看已收藏卡牌</small></button>' +
+          '<button class="entry-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>仓库</span><small>查看全部持有卡牌</small></button>' +
+          '<button class="entry-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板</span><small>朋友圈</small></button>' +
+          '<button class="entry-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><small>好友与关系</small></button>' +
+        '</div>' +
+        '<div class="section-title">最近获得</div>' +
+        '<div id="home-recent-cards" class="card-list"></div>' +
+      '</div>';
+    }
+    if (name === 'me') {
+      return '<div id="page-me" class="page active">' +
+        '<div class="profile-card">' +
+          '<div id="me-avatar" class="profile-avatar"></div>' +
+          '<h2 id="me-name"></h2>' +
+          '<p class="user-id">ID: <span id="me-id"></span></p>' +
+          '<div class="stats-row">' +
+            '<div class="stat-item"><span class="stat-num" id="stat-collection">0</span><span class="stat-label">仓库</span></div>' +
+            '<div class="stat-item"><span class="stat-num" id="stat-friends">0</span><span class="stat-label">好友</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="menu-list">' +
+          '<button class="menu-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><b>›</b></button>' +
+          '<button class="menu-item" data-open-page="collection"><span><i class="flat-icon icon-collection"></i>收藏</span><b>›</b></button>' +
+          '<button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-message"></i>留言板（朋友圈）</span><b>›</b></button>' +
+          '<button class="menu-item" data-open-page="warehouse"><span><i class="flat-icon icon-work"></i>卡牌作品</span><b>›</b></button>' +
+          '<button class="menu-item" data-open-page="message"><span><i class="flat-icon icon-face"></i>表情</span><b>›</b></button>' +
+          '<button class="menu-item" data-open-page="pursuit"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (name === 'pursuit') {
+      return '<div id="page-pursuit" class="page active">' +
+        '<h1>追求</h1>' +
+        '<p class="gacha-desc">当前仅开放设置</p>' +
+        '<div class="menu-list">' +
+          '<button class="menu-item" id="btn-show-admin"><span><i class="flat-icon icon-settings"></i>设置</span><b>›</b></button>' +
+        '</div>' +
+        (appState.adminPanelOpen ?
+        '<div id="admin-panel" class="debug-panel">' +
+          '<div class="section-title">管理员</div>' +
+          '<div class="add-friend-form">' +
+            '<input type="password" id="admin-password-input" placeholder="输入管理员密码">' +
+            '<button id="btn-admin-login" class="btn-small">开启</button>' +
+          '</div>' +
+          '<div id="admin-status" class="gacha-desc">ADMIN_MODE: OFF</div>' +
+          '<div id="debug-panel" class="debug-panel-inner"></div>' +
+        '</div>' : '') +
+      '</div>';
+    }
+    if (name === 'friends') {
+      return '<div id="page-friends" class="page active">' +
+        '<h1>好友</h1>' +
+        '<div class="add-friend-form">' +
+          '<input type="text" id="friend-id-input" placeholder="输入好友 user_id">' +
+          '<button id="btn-add-friend" class="btn-small">添加</button>' +
+        '</div>' +
+        '<div id="friends-list" class="friends-list"></div>' +
+      '</div>';
+    }
+    if (name === 'gacha') {
+      return '<div id="page-gacha" class="page active">' +
+        '<h1>抽卡</h1>' +
+        '<p class="gacha-desc">点击下方按钮抽取随机卡牌</p>' +
+        '<p class="gacha-remain" id="gacha-remain">今日抽卡: 0/3</p>' +
+        '<div class="gacha-area"><div id="gacha-result" class="gacha-result"><span class="placeholder">等待抽卡...</span></div></div>' +
+        '<button id="btn-gacha" class="btn-gacha">开始抽卡！</button>' +
+      '</div>';
+    }
+    if (name === 'collection') {
+      return '<div id="page-collection" class="page active">' +
+        '<h1>我的收藏</h1>' +
+        '<p class="gacha-desc">只显示已收藏的卡牌</p>' +
+        '<div id="collection-list" class="card-list"></div>' +
+      '</div>';
+    }
+    if (name === 'warehouse') {
+      return '<div id="page-warehouse" class="page active">' +
+        '<h1>卡牌仓库</h1>' +
+        '<p class="gacha-desc">显示当前账号持有的全部卡牌</p>' +
+        '<div class="trade-claim-box">' +
+          '<div class="section-title">领取卡牌</div>' +
+          '<div class="add-friend-form">' +
+            '<input type="text" id="trade-code-input" placeholder="输入18位 trade_id 领取卡牌" autocomplete="off" maxlength="18">' +
+            '<button id="btn-claim-trade" class="btn-small">领取</button>' +
+          '</div>' +
+        '</div>' +
+        '<div id="warehouse-list" class="card-list"></div>' +
+      '</div>';
+    }
+    if (name === 'message') {
+      return '<div id="page-message" class="page active">' +
+        '<h1>留言板</h1>' +
+        '<p class="gacha-desc" id="msg">点击按钮进入留言板</p>' +
+        (!appState.messageComposeOpen ? '<button id="myBtn" class="btn-primary">进入留言板</button>' : '') +
+        (appState.messageComposeOpen ?
+        '<div id="inputArea" class="message-compose">' +
+          '<div class="add-friend-form">' +
+            '<input type="text" id="userInput" placeholder="写点什么..." maxlength="200" autocomplete="off">' +
+            '<button id="sendBtn" class="btn-small">发送</button>' +
+          '</div>' +
+          '<div id="moodArea">' +
+            '<div class="mood-row">' +
+              '<span style="font-size:13px;color:var(--subtext);margin-right:8px;">心情：</span>' +
+              '<button class="mood-btn" data-mood="开心">😄 开心</button>' +
+              '<button class="mood-btn" data-mood="平静">😌 平静</button>' +
+              '<button class="mood-btn" data-mood="难过">😢 难过</button>' +
+              '<button class="mood-btn" data-mood="生气">😠 生气</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' : '') +
+        '<div id="messages" class="card-list"></div>' +
+      '</div>';
+    }
+    return getPageHtml('home');
   }
 
   function render() {
     safeRender(function() {
       var name = Router ? Router.current : appState.currentPage;
-      var target = document.getElementById('page-' + name);
-      if (!target) name = appState.user ? 'home' : 'login';
-
-      eachNode(document.querySelectorAll('.page'), function(page) {
-        page.classList.remove('active');
-      });
-
-      target = document.getElementById('page-' + name);
-      if (target) target.classList.add('active');
+      var container = document.getElementById('app');
+      if (!container) return;
       appState.currentPage = name;
 
       var isSubPage = Router.stack.length > 0;
       console.log("render:", isSubPage, Router.stack.length);
 
+      container.innerHTML = "";
       if (document.body) {
         document.body.classList.toggle('is-sub-page', isSubPage);
         document.body.classList.toggle('is-login-page', name === 'login');
       }
-      rebuildBackButton(isSubPage);
 
-      eachNode(document.querySelectorAll('.nav-item'), function(button) {
-        button.classList.toggle('active', button.getAttribute('data-page') === name);
-      });
+      container.innerHTML =
+        (isSubPage ? '<button id="page-back" class="page-back back" type="button" aria-label="返回">‹</button>' : '') +
+        getPageHtml(name) +
+        (!isSubPage && name !== 'login' ? getBottomNavHtml(name) : '');
+
+      var backBtn = document.querySelector('.back');
+      if (backBtn) {
+        backBtn.onclick = Router.pop;
+        backBtn.ontouchend = Router.pop;
+      }
+      bindRenderedEvents();
     }, 'render');
   }
 
@@ -364,8 +517,6 @@
 
   function showAppPage(name) {
     safeRender(function() {
-      var loginPage = document.getElementById('page-login');
-      if (loginPage) loginPage.classList.remove('active');
       if (!Router) initRouter();
       Router.replace(name);
     }, 'showAppPage:' + name);
@@ -1267,8 +1418,7 @@
   }
 
   function isMessagePageActive() {
-    var page = document.getElementById('page-message');
-    return !!(page && page.classList.contains('active'));
+    return !!(Router && Router.current === 'message');
   }
 
   function subscribeMessagesRealtime() {
@@ -1389,7 +1539,7 @@
     showToast('ADMIN_MODE 已开启');
     updateAdminStatus();
     loadGachaRemain();
-    if (document.getElementById('page-message').classList.contains('active')) loadMessages();
+    if (isMessagePageActive()) loadMessages();
   }
 
   function updateAdminStatus() {
@@ -1397,7 +1547,6 @@
     if (status) status.textContent = 'ADMIN_MODE: ' + (appState.adminMode ? 'ON' : 'OFF');
     var debugPanel = document.getElementById('debug-panel');
     if (debugPanel) {
-      debugPanel.style.display = appState.adminMode ? 'block' : 'none';
       debugPanel.innerHTML = appState.adminMode ? renderDebugPanel() : '';
     }
   }
@@ -1432,7 +1581,7 @@
   function handleHistoryPageChange(event) {
     var state = event.state || {};
     var page = state.page;
-    if (!page || !document.getElementById('page-' + page)) {
+    if (!page) {
       page = appState.user ? 'home' : 'login';
     }
     if (!Router) initRouter();
@@ -1490,16 +1639,17 @@
     }, { passive: true });
   }
 
-  function bindEvents() {
+  function bindRenderedEvents() {
     safeRender(function() {
+      renderAvatarPicker();
       bindClick('btn-login', login);
       bindEnter('login-name', login);
       bindClick('btn-add-friend', addFriend);
       bindEnter('friend-id-input', addFriend);
       bindClick('btn-gacha', runGacha);
       bindClick('btn-show-admin', function() {
-        var panel = document.getElementById('admin-panel');
-        if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        appState.adminPanelOpen = !appState.adminPanelOpen;
+        render();
         updateAdminStatus();
       });
       bindClick('btn-admin-login', enableAdminMode);
@@ -1507,12 +1657,8 @@
       bindClick('btn-claim-trade', claimTradeCode);
       bindEnter('trade-code-input', claimTradeCode);
       bindClick('myBtn', function() {
-        var myBtn = document.getElementById('myBtn');
-        var inputArea = document.getElementById('inputArea');
-        var moodArea = document.getElementById('moodArea');
-        if (myBtn) myBtn.style.display = 'none';
-        if (inputArea) inputArea.style.display = 'flex';
-        if (moodArea) moodArea.style.display = 'flex';
+        appState.messageComposeOpen = true;
+        render();
         loadMessages();
       });
       bindClick('sendBtn', sendMessage);
@@ -1533,6 +1679,12 @@
           openPage(page);
         };
       });
+      if (Router && Router.current === 'pursuit') updateAdminStatus();
+    }, 'bindRenderedEvents');
+  }
+
+  function bindEvents() {
+    safeRender(function() {
       bindBackNavigation();
       bindSwipeBack();
       window.addEventListener('online', function() {
@@ -1544,7 +1696,6 @@
   function initApp() {
     try {
       hideLoading();
-      renderAvatarPicker();
       bindEvents();
       registerServiceWorker();
       restoreSession().then(function(user) {

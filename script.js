@@ -497,7 +497,8 @@
         syncHistoryState(page, 'replace');
       },
       push: function(page) {
-        if (this.current && this.current !== 'login') this.stack.push(this.current);
+        if (this.current && this.current !== 'login' && this.current !== page) this.stack.push(this.current);
+        if (!this.stack.length && this.current !== page && this.current !== 'login') this.stack.push(this.current);
         this.current = page;
         render();
         syncHistoryState(page, 'push');
@@ -1544,6 +1545,8 @@
     if (options.skipHistory === true) {
       Router.current = page;
       render();
+    } else if (options.forceSubPage === true) {
+      Router.push(page);
     } else if (isTopLevelPage(page) || page === 'login') {
       Router.replace(page);
     } else {
@@ -1695,7 +1698,7 @@
       });
       eachNode(document.querySelectorAll('[data-open-page]'), function(button) {
         button.onclick = function() {
-          openPage(button.getAttribute('data-open-page'));
+          openPage(button.getAttribute('data-open-page'), { forceSubPage: true });
         };
       });
       eachNode(document.querySelectorAll('.nav-item'), function(button) {

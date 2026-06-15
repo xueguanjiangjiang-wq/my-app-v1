@@ -44,6 +44,8 @@
   };
   var messagesRealtimeChannel = null;
   var swipeBackState = null;
+  var lastBackTouchTime = 0;
+  var Router = null;
 
   function recoverFromFatalError() {
     var run = function() {
@@ -247,7 +249,99 @@
   }
 
   function isSubPage(name) {
-    return name !== 'login' && !isTopLevelPage(name);
+    return !!(Router && Router.stack.length > 0);
+  }
+
+  function syncHistoryState(name, mode) {
+    if (!window.history || !window.history.pushState) return;
+    var state = {
+      page: name,
+      stack: Router ? Router.stack.slice() : [],
+      isSubPage: !!(Router && Router.stack.length > 0)
+    };
+    var url = '#/' + name;
+    if (mode === 'push') window.history.pushState(state, '', url);
+    else window.history.replaceState(state, '', url);
+  }
+
+  function clearAndBindBackButton() {
+    var back = document.querySelector('.back');
+    if (!back || !back.parentNode) return;
+
+    var freshBack = back.cloneNode(true);
+    back.parentNode.replaceChild(freshBack, back);
+
+    freshBack.onclick = Router.pop;
+    freshBack.ontouchend = Router.pop;
+  }
+
+  function render() {
+    safeRender(function() {
+      var name = Router ? Router.current : appState.currentPage;
+      var target = document.getElementById('page-' + name);
+      if (!target) name = appState.user ? 'home' : 'login';
+
+      eachNode(document.querySelectorAll('.page'), function(page) {
+        page.classList.remove('active');
+      });
+
+      target = document.getElementById('page-' + name);
+      if (target) target.classList.add('active');
+      appState.currentPage = name;
+
+      var isSubPageState = isSubPage(name);
+      var nav = document.getElementById('bottom-nav');
+      var back = document.querySelector('.back');
+
+      if (document.body) document.body.classList.toggle('is-sub-page', isSubPageState);
+      if (nav) nav.style.display = name !== 'login' && !isSubPageState ? 'flex' : 'none';
+      if (back) back.style.display = isSubPageState ? 'inline-flex' : 'none';
+
+      eachNode(document.querySelectorAll('.nav-item'), function(button) {
+        button.classList.toggle('active', button.getAttribute('data-page') === name);
+      });
+
+      clearAndBindBackButton();
+    }, 'render');
+  }
+
+  function initRouter() {
+    Router = {
+      current: 'login',
+      stack: [],
+      replace: function(page) {
+        this.current = page;
+        this.stack = [];
+        render();
+        syncHistoryState(page, 'replace');
+      },
+      push: function(page) {
+        if (this.current && this.current !== 'login') this.stack.push(this.current);
+        this.current = page;
+        render();
+        syncHistoryState(page, 'push');
+      },
+      pop: function(event) {
+        if (event && event.preventDefault) event.preventDefault();
+        if (event && event.stopPropagation) event.stopPropagation();
+        if (event && event.type === 'touchend') {
+          lastBackTouchTime = Date.now();
+        } else if (event && event.type === 'click' && Date.now() - lastBackTouchTime < 450) {
+          return;
+        }
+        if (Router.stack.length > 0) {
+          Router.current = Router.stack.pop();
+        }
+        render();
+        syncHistoryState(Router.current, 'replace');
+        loadPageData(Router.current);
+      },
+      restore: function(page, stack) {
+        this.current = page;
+        this.stack = Array.isArray(stack) ? stack.slice() : [];
+        render();
+      }
+    };
   }
 
   function setNavigationChrome(name) {
@@ -259,36 +353,18 @@
     if (back) back.style.display = subPage ? 'inline-flex' : 'none';
   }
 
-  function syncHistoryState(name, mode) {
-    if (!window.history || !window.history.pushState) return;
-    var state = {
-      page: name,
-      isSubPage: isSubPage(name)
-    };
-    var url = '#/' + name;
-    if (mode === 'push') window.history.pushState(state, '', url);
-    else window.history.replaceState(state, '', url);
-  }
-
   function showPage(name) {
     safeRender(function() {
-      eachNode(document.querySelectorAll('.page'), function(page) {
-        page.classList.remove('active');
-      });
-      var target = document.getElementById('page-' + name);
-      if (target) target.classList.add('active');
-      appState.currentPage = target ? name : appState.currentPage;
-      setNavigationChrome(name);
-      eachNode(document.querySelectorAll('.nav-item'), function(button) {
-        button.classList.toggle('active', button.getAttribute('data-page') === name);
-      });
+      if (!Router) initRouter();
+      Router.current = name;
+      render();
     }, 'showPage:' + name);
   }
 
   function showLoginPage() {
     safeRender(function() {
-      showPage('login');
-      syncHistoryState('login', 'replace');
+      if (!Router) initRouter();
+      Router.replace('login');
     }, 'showLoginPage');
   }
 
@@ -296,8 +372,8 @@
     safeRender(function() {
       var loginPage = document.getElementById('page-login');
       if (loginPage) loginPage.classList.remove('active');
-      showPage(name);
-      syncHistoryState(name, 'replace');
+      if (!Router) initRouter();
+      Router.replace(name);
     }, 'showAppPage:' + name);
   }
 
@@ -1295,11 +1371,16 @@
 
   function openPage(page, options) {
     options = options || {};
-    showPage(page);
-    loadPageData(page);
-    if (options.skipHistory !== true) {
-      syncHistoryState(page, isSubPage(page) ? 'push' : 'replace');
+    if (!Router) initRouter();
+    if (options.skipHistory === true) {
+      Router.current = page;
+      render();
+    } else if (isTopLevelPage(page) || page === 'login') {
+      Router.replace(page);
+    } else {
+      Router.push(page);
     }
+    loadPageData(page);
   }
 
   function enableAdminMode() {
@@ -1360,17 +1441,13 @@
     if (!page || !document.getElementById('page-' + page)) {
       page = appState.user ? 'home' : 'login';
     }
-    showPage(page);
+    if (!Router) initRouter();
+    Router.restore(page, state.stack);
     loadPageData(page);
   }
 
   function bindBackNavigation() {
-    var back = document.getElementById('page-back');
-    if (back) {
-      back.onclick = function() {
-        window.history.back();
-      };
-    }
+    if (!Router) initRouter();
     window.addEventListener('popstate', handleHistoryPageChange);
   }
 
@@ -1410,7 +1487,7 @@
         Math.abs(swipeBackState.deltaY) <= 60;
       swipeBackState = null;
       if (shouldBack && isSubPage(appState.currentPage)) {
-        window.history.back();
+        Router.pop();
       }
     }, { passive: true });
 

@@ -1,6 +1,7 @@
 -- Repeatable Supabase fix script for users, cards, trades, friends, and messages.
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gacha_remaining INTEGER NOT NULL DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "users_select_all" ON users;

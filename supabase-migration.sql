@@ -8,13 +8,20 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   avatar TEXT NOT NULL DEFAULT '😀',
+  signature TEXT NOT NULL DEFAULT '',
   gacha_remaining INTEGER NOT NULL DEFAULT 3,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 如果已有 users 表，添加 gacha_remaining 列
+-- 如果已有 users 表，添加资料列
 DO 
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'signature'
+  ) THEN
+    ALTER TABLE users ADD COLUMN signature TEXT NOT NULL DEFAULT '';
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'users' AND column_name = 'gacha_remaining'

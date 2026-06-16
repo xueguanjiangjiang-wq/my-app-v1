@@ -43,6 +43,7 @@
     adminMode: sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
     adminPanelOpen: false,
     messageComposeOpen: false,
+    profileUserId: null,
     currentPage: 'login'
   };
   var messagesRealtimeChannel = null;
@@ -188,6 +189,19 @@
       created_at: createdAt,
       sync_status: status || message.sync_status || (message.id ? 'synced' : 'pending')
     };
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function getUserSignature(user) {
+    return user && user.signature ? user.signature : '这个人还没有设置个性签名';
   }
 
   function isMissingUserError(err) {
@@ -339,6 +353,7 @@
           '<div class="home-profile-main">' +
             '<h2 id="home-name"></h2>' +
             '<p class="user-id">ID: <span id="home-id"></span></p>' +
+            '<p class="profile-signature" id="home-signature"></p>' +
             '<div class="stats-row home-stats-row">' +
               '<div class="stat-item"><span class="stat-num" id="home-stat-collection">0</span><span class="stat-label">资料</span></div>' +
               '<div class="stat-item"><span class="stat-num" id="home-stat-friends">0</span><span class="stat-label">关系</span></div>' +
@@ -353,10 +368,21 @@
           '<div id="me-avatar" class="profile-avatar"></div>' +
           '<h2 id="me-name"></h2>' +
           '<p class="user-id">ID: <span id="me-id"></span></p>' +
+          '<p class="profile-signature" id="me-signature"></p>' +
           '<div class="stats-row">' +
             '<div class="stat-item"><span class="stat-num" id="stat-collection">0</span><span class="stat-label">仓库</span></div>' +
             '<div class="stat-item"><span class="stat-num" id="stat-friends">0</span><span class="stat-label">好友</span></div>' +
           '</div>' +
+        '</div>' +
+        '<div class="profile-edit-card">' +
+          '<div class="section-title">编辑资料</div>' +
+          '<div class="form-group">' +
+            '<input type="text" id="profile-name-input" placeholder="用户名" maxlength="20" autocomplete="off">' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<textarea id="profile-signature-input" placeholder="个性签名" maxlength="80"></textarea>' +
+          '</div>' +
+          '<button id="btn-save-profile" class="btn-primary">保存资料</button>' +
         '</div>' +
         '<div class="menu-list">' +
           '<button class="menu-item" data-open-page="friends"><span><i class="flat-icon icon-service"></i>服务</span><b>›</b></button>' +
@@ -418,6 +444,23 @@
           '<button id="btn-add-friend" class="btn-small">添加</button>' +
         '</div>' +
         '<div id="friends-list" class="friends-list"></div>' +
+      '</div>';
+    }
+    if (name === 'friend-profile') {
+      return '<div id="page-friend-profile" class="page active">' +
+        '<h1>好友名片</h1>' +
+        '<div class="profile-card home-profile-card friend-profile-card">' +
+          '<div id="friend-profile-avatar" class="profile-avatar"></div>' +
+          '<div class="home-profile-main">' +
+            '<h2 id="friend-profile-name"></h2>' +
+            '<p class="user-id">ID: <span id="friend-profile-id"></span></p>' +
+            '<p class="profile-signature" id="friend-profile-signature"></p>' +
+            '<div class="stats-row home-stats-row">' +
+              '<div class="stat-item"><span class="stat-num" id="friend-profile-stat-collection">0</span><span class="stat-label">资料</span></div>' +
+              '<div class="stat-item"><span class="stat-num" id="friend-profile-stat-friends">0</span><span class="stat-label">关系</span></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
       '</div>';
     }
     if (name === 'gacha') {
@@ -628,6 +671,14 @@
       }).eq('id', userId).select('*').single(); }).then(function(res) {
         appState.user = res.data;
         return res.data.gacha_remaining;
+      });
+    },
+    updateProfile: function(userId, payload) {
+      return sb(function() {
+        return supabase.from('users').update(payload).eq('id', userId).select('*').single();
+      }).then(function(res) {
+        if (res && res.error) throw res.error;
+        return res.data;
       });
     }
   };
@@ -981,9 +1032,15 @@
       setText('me-avatar', appState.user.avatar || '😀');
       setText('me-name', appState.user.name);
       setText('me-id', userId);
+      setText('me-signature', getUserSignature(appState.user));
       setText('home-avatar', appState.user.avatar || '😀');
       setText('home-name', appState.user.name);
       setText('home-id', userId);
+      setText('home-signature', getUserSignature(appState.user));
+      var nameInput = document.getElementById('profile-name-input');
+      var signatureInput = document.getElementById('profile-signature-input');
+      if (nameInput) nameInput.value = appState.user.name || '';
+      if (signatureInput) signatureInput.value = appState.user.signature || '';
       updateAdminStatus();
     }, 'updateHome:profile');
 
@@ -1009,6 +1066,87 @@
       setText('home-stat-friends', '0');
     });
 
+  }
+
+  function saveProfile() {
+    if (!appState.user) {
+      showToast('请先登录');
+      return;
+    }
+    var nameInput = document.getElementById('profile-name-input');
+    var signatureInput = document.getElementById('profile-signature-input');
+    var name = nameInput ? nameInput.value.trim() : '';
+    var signature = signatureInput ? signatureInput.value.trim() : '';
+    if (!name) {
+      showToast('用户名不能为空');
+      return;
+    }
+    if (name.length > 20) {
+      showToast('用户名最多20个字');
+      return;
+    }
+    if (signature.length > 80) {
+      showToast('个性签名最多80个字');
+      return;
+    }
+    UserCore.updateProfile(requireUserId(), {
+      name: name,
+      signature: signature
+    }).then(function(user) {
+      setCurrentUser(user);
+      showToast('资料已保存');
+      updateHome();
+    }).catch(function(err) {
+      console.error('保存资料失败:', err);
+      var msg = getErrorMessage(err);
+      if (msg.indexOf('Unique') !== -1 || msg.indexOf('duplicate') !== -1 || msg.indexOf('23505') !== -1) {
+        showToast('用户名已存在，请换一个');
+      } else if (msg.indexOf('signature') !== -1 || msg.indexOf('schema cache') !== -1 || msg.indexOf('could not find') !== -1) {
+        showToast('请先执行 supabase-migration.sql 增加个性签名字段');
+      } else {
+        showToast('保存失败: ' + msg);
+      }
+    });
+  }
+
+  function openFriendProfile(friendId) {
+    if (!friendId) return;
+    appState.profileUserId = friendId;
+    openPage('friend-profile', { forceSubPage: true });
+  }
+
+  function loadFriendProfile() {
+    var friendId = appState.profileUserId;
+    if (!friendId) {
+      showToast('缺少好友 ID');
+      openPage('friends', { forceSubPage: true });
+      return;
+    }
+    UserCore.getById(friendId).then(function(friendUser) {
+      if (!friendUser) {
+        showToast('好友不存在');
+        return;
+      }
+      safeRender(function() {
+        setText('friend-profile-avatar', friendUser.avatar || '😀');
+        setText('friend-profile-name', friendUser.name || '');
+        setText('friend-profile-id', friendUser.id || '');
+        setText('friend-profile-signature', getUserSignature(friendUser));
+      }, 'loadFriendProfile:profile');
+      AssetLayer.listCards(friendId).then(function(res) {
+        setText('friend-profile-stat-collection', (res.data || []).length);
+      }).catch(function() {
+        setText('friend-profile-stat-collection', '0');
+      });
+      SocialLayer.listFriends(friendId).then(function(res) {
+        setText('friend-profile-stat-friends', (res.data || []).length);
+      }).catch(function() {
+        setText('friend-profile-stat-friends', '0');
+      });
+    }).catch(function(err) {
+      console.error('加载好友名片失败:', err);
+      showToast('加载好友名片失败');
+    });
   }
 
   function setText(id, value) {
@@ -1187,8 +1325,26 @@
           if (!friendUser) return;
           var el = document.createElement('div');
           el.className = 'friend-item';
-          el.innerHTML = '<div class="friend-avatar">' + (friendUser.avatar || '😀') + '</div><div class="friend-info"><div class="friend-name">' + friendUser.name + '</div><div class="friend-id-display">ID: ' + friendUser.id + '</div></div><button class="btn-remove btn-danger btn-small">删除</button>';
-          el.querySelector('.btn-remove').onclick = function() {
+          el.setAttribute('role', 'button');
+          el.setAttribute('tabindex', '0');
+          el.innerHTML =
+            '<div class="friend-avatar">' + escapeHtml(friendUser.avatar || '😀') + '</div>' +
+            '<div class="friend-info">' +
+              '<div class="friend-name">' + escapeHtml(friendUser.name) + '</div>' +
+              '<div class="friend-id-display">ID: ' + escapeHtml(friendUser.id) + '</div>' +
+              '<div class="friend-signature">' + escapeHtml(getUserSignature(friendUser)) + '</div>' +
+            '</div>' +
+            '<button class="btn-remove btn-danger btn-small" type="button">删除</button>';
+          el.onclick = function() {
+            openFriendProfile(friend.friend_id);
+          };
+          el.onkeypress = function(event) {
+            event = event || window.event;
+            if (event.key === 'Enter' || event.keyCode === 13) openFriendProfile(friend.friend_id);
+          };
+          el.querySelector('.btn-remove').onclick = function(event) {
+            if (event && event.preventDefault) event.preventDefault();
+            if (event && event.stopPropagation) event.stopPropagation();
             SocialLayer.removeFriend(userId, friend.friend_id).then(function() {
               showToast('已删除好友');
               loadFriends();
@@ -1717,6 +1873,7 @@
     if (page === 'me') updateHome();
     if (page === 'pursuit') updateAdminStatus();
     if (page === 'friends') loadFriends();
+    if (page === 'friend-profile') loadFriendProfile();
     if (page === 'collection') loadCollection();
     if (page === 'warehouse') loadWarehouse();
     if (page === 'gacha') loadGachaRemain();
@@ -1868,6 +2025,7 @@
       renderAvatarPicker();
       bindClick('btn-login', login);
       bindEnter('login-name', login);
+      bindClick('btn-save-profile', saveProfile);
       bindClick('btn-add-friend', addFriend);
       bindEnter('friend-id-input', addFriend);
       bindClick('btn-show-admin', function() {

@@ -11,6 +11,7 @@ CREATE POLICY "任何人可查询卡牌" ON cards FOR SELECT USING (true);
 CREATE POLICY "用户可删除自己的卡牌" ON cards FOR DELETE USING (true);
 
 -- 同样修复 users 表
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signature TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "任何人可查询用户" ON users FOR SELECT USING (true);
 CREATE POLICY "任何人可插入用户" ON users FOR INSERT WITH CHECK (true);

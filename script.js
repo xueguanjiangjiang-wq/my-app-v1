@@ -22,7 +22,8 @@
   var supabase = window.supabase && window.supabase.createClient ?
     window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) :
     null;
-  var ADMIN_PASSWORD = '222';
+  var ADMIN_PASSWORD = '7';
+  var ADMIN_SESSION_KEY = 'isAdmin';
   var DAILY_GACHA_LIMIT = 3;
   var SESSION_USER_ID_KEY = 'cardapp_current_user_id';
   var SUPABASE_RETRY_LIMIT = 2;
@@ -39,7 +40,7 @@
     user: null,
     selectedAvatar: '😀',
     isDrawing: false,
-    adminMode: false,
+    adminMode: sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true',
     adminPanelOpen: false,
     messageComposeOpen: false,
     currentPage: 'login'
@@ -404,6 +405,7 @@
             '<button id="btn-admin-login" class="btn-small">开启</button>' +
           '</div>' +
           '<div id="admin-status" class="gacha-desc">ADMIN_MODE: OFF</div>' +
+          (appState.adminMode ? '<button id="btn-admin-logout" class="btn-small">退出管理员模式</button>' : '') +
           '<div id="debug-panel" class="debug-panel-inner"></div>' +
         '</div>' : '') +
       '</div>';
@@ -1280,6 +1282,12 @@
   }
 
   function renderGachaUI(remaining) {
+    if (appState.adminMode) {
+      var adminLabel = document.getElementById('gacha-remain');
+      if (adminLabel) adminLabel.textContent = '管理员模式: 无限抽卡';
+      renderGachaSlots(DAILY_GACHA_LIMIT);
+      return;
+    }
     var remain = Number(remaining || 0);
     var label = document.getElementById('gacha-remain');
     remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, remain));
@@ -1305,7 +1313,7 @@
       return;
     }
 
-    var remaining = getTodayGachaRemaining(userId);
+    var remaining = appState.adminMode ? DAILY_GACHA_LIMIT : getTodayGachaRemaining(userId);
     if (remaining <= 0) {
       showToast('今日次数已用完');
       renderGachaUI(0);
@@ -1320,10 +1328,13 @@
     var card = drawCard();
     AssetLayer.createCards(userId, [card]).then(function(res) {
       var savedCard = res.data && res.data.length ? res.data[0] : card;
-      var used = setTodayGachaUsed(userId, getTodayGachaUsed(userId) + 1);
-      var nextRemaining = DAILY_GACHA_LIMIT - used;
+      var nextRemaining = DAILY_GACHA_LIMIT;
+      if (!appState.adminMode) {
+        var used = setTodayGachaUsed(userId, getTodayGachaUsed(userId) + 1);
+        nextRemaining = DAILY_GACHA_LIMIT - used;
+      }
       slot.classList.remove('is-saving');
-      slot.disabled = true;
+      slot.disabled = !appState.adminMode;
       slot.innerHTML = '<div class="gacha-flip-inner">' +
         '<div class="gacha-face gacha-back"><span>卡牌</span><small>已翻开</small></div>' +
         '<div class="gacha-face gacha-front">' + renderGachaResult(savedCard, userId) + '</div>' +
@@ -1332,9 +1343,11 @@
         slot.classList.add('revealed');
       });
       renderGachaStatus(nextRemaining, slot);
-      UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
-        console.warn('同步抽卡次数失败:', err);
-      });
+      if (!appState.adminMode) {
+        UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
+          console.warn('同步抽卡次数失败:', err);
+        });
+      }
       showToast('已获得 1 张卡牌');
       updateHome();
       appState.isDrawing = false;
@@ -1350,6 +1363,15 @@
   }
 
   function renderGachaStatus(remaining, activeSlot) {
+    if (appState.adminMode) {
+      var adminLabel = document.getElementById('gacha-remain');
+      if (adminLabel) adminLabel.textContent = '管理员模式: 无限抽卡';
+      if (activeSlot) {
+        activeSlot.disabled = false;
+        activeSlot.setAttribute('aria-label', '管理员无限抽卡，点击继续抽取');
+      }
+      return;
+    }
     var label = document.getElementById('gacha-remain');
     var remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, Number(remaining || 0)));
     if (label) label.textContent = remain <= 0 ? '今日已抽完: 0/3' : '今日剩余: ' + remain + '/' + DAILY_GACHA_LIMIT;
@@ -1699,8 +1721,20 @@
       return;
     }
     appState.adminMode = true;
+    sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
     if (input) input.value = '';
     showToast('ADMIN_MODE 已开启');
+    render();
+    updateAdminStatus();
+    loadGachaRemain();
+    if (isMessagePageActive()) loadMessages();
+  }
+
+  function disableAdminMode() {
+    appState.adminMode = false;
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    showToast('ADMIN_MODE 已关闭');
+    render();
     updateAdminStatus();
     loadGachaRemain();
     if (isMessagePageActive()) loadMessages();
@@ -1817,6 +1851,7 @@
       });
       bindClick('btn-admin-login', enableAdminMode);
       bindEnter('admin-password-input', enableAdminMode);
+      bindClick('btn-admin-logout', disableAdminMode);
       bindClick('btn-claim-trade', claimTradeCode);
       bindEnter('trade-code-input', claimTradeCode);
       bindClick('user-avatar-button', function() {

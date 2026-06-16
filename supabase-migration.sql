@@ -44,6 +44,35 @@ CREATE TABLE IF NOT EXISTS friends (
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id, friend_id)
 );
+ALTER TABLE friends ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+UPDATE friends SET created_at = now() WHERE created_at IS NULL;
+
+DELETE FROM friends a
+USING friends b
+WHERE a.ctid < b.ctid
+  AND a.user_id = b.user_id
+  AND a.friend_id = b.friend_id;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.friends'::regclass
+      AND conname = 'friends_user_id_friend_id_key'
+  ) THEN
+    ALTER TABLE friends
+      ADD CONSTRAINT friends_user_id_friend_id_key UNIQUE (user_id, friend_id);
+  END IF;
+END $$;
+
+INSERT INTO friends (user_id, friend_id)
+SELECT f.friend_id, f.user_id
+FROM friends f
+WHERE f.user_id IS NOT NULL
+  AND f.friend_id IS NOT NULL
+  AND f.user_id <> f.friend_id
+ON CONFLICT (user_id, friend_id) DO NOTHING;
 
 -- Friend RLS 策略
 ALTER TABLE friends ENABLE ROW LEVEL SECURITY;

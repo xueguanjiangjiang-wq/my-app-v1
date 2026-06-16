@@ -634,6 +634,24 @@
     listFriends: function(userId) {
       return sb(function() { return supabase.from('friends').select('*').eq('user_id', userId).order('created_at', { ascending: false }); });
     },
+    isDuplicateFriendError: function(err) {
+      if (!err) return false;
+      var msg = (err.message || err.details || '').toLowerCase();
+      return err.code === '23505' ||
+        msg.indexOf('duplicate') !== -1 ||
+        msg.indexOf('unique') !== -1;
+    },
+    insertFriendEdge: function(userId, friendId) {
+      return sb(function() {
+        return supabase.from('friends').insert({
+          user_id: userId,
+          friend_id: friendId
+        });
+      }).then(function(res) {
+        if (res && res.error && !SocialLayer.isDuplicateFriendError(res.error)) throw res.error;
+        return res;
+      });
+    },
     addFriend: function(userId, friendId) {
       return sb(function() {
         return supabase
@@ -641,6 +659,7 @@
           .select('user_id,friend_id')
           .or('and(user_id.eq.' + userId + ',friend_id.eq.' + friendId + '),and(user_id.eq.' + friendId + ',friend_id.eq.' + userId + ')');
       }).then(function(res) {
+        if (res && res.error) throw res.error;
         var rows = res.data || [];
         var hasForward = false;
         var hasReverse = false;
@@ -649,15 +668,14 @@
           if (row.user_id === friendId && row.friend_id === userId) hasReverse = true;
         });
         if (hasForward && hasReverse) return { alreadyExists: true };
-        var insertRows = [];
-        if (!hasForward) insertRows.push({ user_id: userId, friend_id: friendId });
-        if (!hasReverse) insertRows.push({ user_id: friendId, friend_id: userId });
-        return sb(function() {
-          return supabase
-            .from('friends')
-            .upsert(insertRows, { onConflict: 'user_id,friend_id', ignoreDuplicates: true });
+        return Promise.resolve().then(function() {
+          if (hasForward) return null;
+          return SocialLayer.insertFriendEdge(userId, friendId);
         }).then(function() {
-          return { alreadyExists: rows.length > 0 };
+          if (hasReverse) return null;
+          return SocialLayer.insertFriendEdge(friendId, userId);
+        }).then(function() {
+          return { alreadyExists: false };
         });
       });
     },
@@ -1313,7 +1331,7 @@
       requestAnimationFrame(function() {
         slot.classList.add('revealed');
       });
-      renderGachaStatus(nextRemaining);
+      renderGachaStatus(nextRemaining, slot);
       UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
         console.warn('同步抽卡次数失败:', err);
       });
@@ -1331,12 +1349,13 @@
     });
   }
 
-  function renderGachaStatus(remaining) {
+  function renderGachaStatus(remaining, activeSlot) {
     var label = document.getElementById('gacha-remain');
     var remain = Math.max(0, Math.min(DAILY_GACHA_LIMIT, Number(remaining || 0)));
     if (label) label.textContent = remain <= 0 ? '今日已抽完: 0/3' : '今日剩余: ' + remain + '/' + DAILY_GACHA_LIMIT;
     if (remain <= 0) {
       eachNode(document.querySelectorAll('.gacha-flip-card:not(.revealed)'), function(slot) {
+        if (slot === activeSlot) return;
         slot.disabled = true;
         slot.classList.add('is-used');
         slot.innerHTML = '<div class="gacha-flip-inner">' +

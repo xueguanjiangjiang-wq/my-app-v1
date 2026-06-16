@@ -315,7 +315,7 @@
     if (name === 'login') {
       return '<div id="page-login" class="page active">' +
         '<div class="login-container">' +
-          '<h1>🎴 蒋的APP</h1>' +
+          '<h1>🎴 Cuecara</h1>' +
           '<p class="subtitle">关系 · 收藏 · 名片</p>' +
           '<div class="form-group">' +
             '<input type="text" id="login-name" placeholder="输入你的名字（昵称）" maxlength="20" autocomplete="off">' +

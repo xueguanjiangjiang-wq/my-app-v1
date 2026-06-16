@@ -1,6 +1,6 @@
 {
-  "name": "我的APP",
-  "short_name": "APP",
+  "name": "Cuecara",
+  "short_name": "Cuecara",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

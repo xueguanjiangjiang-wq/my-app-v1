@@ -22,7 +22,7 @@
   var supabase = window.supabase && window.supabase.createClient ?
     window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) :
     null;
-  var ADMIN_PASSWORD = '7';
+  var ADMIN_PASSWORD = '222';
   var ADMIN_SESSION_KEY = 'isAdmin';
   var DAILY_GACHA_LIMIT = 3;
   var SESSION_USER_ID_KEY = 'cardapp_current_user_id';
@@ -866,10 +866,9 @@
 
   var AVATARS = ['😀','😎','🤩','🥳','😺','🐱','🦊','🐼','🐨','🦁','🐯','🐸','🌟','⚡','🔥','💎'];
   var RARITY_POOL = [
-    { rarity: 'N', weight: 60 },
-    { rarity: 'R', weight: 25 },
-    { rarity: 'SR', weight: 10 },
-    { rarity: 'SSR', weight: 4 },
+    { rarity: 'SR', weight: 70 },
+    { rarity: 'SSR', weight: 22 },
+    { rarity: 'XR', weight: 7 },
     { rarity: 'UR', weight: 1 }
   ];
   var CARD_IMAGES = {
@@ -877,6 +876,7 @@
     R: '',
     SR: '',
     SSR: '',
+    XR: '',
     UR: ''
   };
   var CARD_NAMES = {
@@ -884,7 +884,16 @@
     R: ['火焰','冰霜','雷电','风暴','陨石','极光','火山','闪电'],
     SR: ['凤凰','麒麟','白龙','金乌','鲲鹏','玄武','青龙','饕餮'],
     SSR: ['混沌','创世','虚空','时空','命运','轮回','星辰','世界'],
+    XR: ['星海','天穹','灵辉','秘银','曜石','苍穹','神谕','星轨'],
     UR: ['创世之神','宇宙之心','永恒之光','无限之源','命运编织者']
+  };
+  var STAR_RATINGS = {
+    N: 3,
+    R: 3,
+    SR: 3,
+    SSR: 4,
+    XR: 5,
+    UR: 6
   };
 
   function renderAvatarPicker() {
@@ -1014,6 +1023,17 @@
     return image.indexOf('/icon-192.png') === -1 && image.indexOf('/icon-512.png') === -1;
   }
 
+  function getStarRating(rarity) {
+    return STAR_RATINGS[rarity] || 3;
+  }
+
+  function getStarLabel(rarity) {
+    var count = getStarRating(rarity);
+    var stars = '';
+    for (var i = 0; i < count; i += 1) stars += '★';
+    return stars;
+  }
+
   function createCardItem(card) {
     var el = document.createElement('div');
     el.className = 'card-item';
@@ -1025,7 +1045,7 @@
     el.innerHTML =
       '<div class="card-visual">' +
         imageHtml +
-        '<div class="card-rarity rarity-' + card.rarity + '">' + card.rarity + '</div>' +
+        '<div class="card-rarity card-stars rarity-' + card.rarity + '" aria-label="' + getStarRating(card.rarity) + '星">' + getStarLabel(card.rarity) + '</div>' +
       '</div>' +
       '<div class="card-asset-info">' +
         '<span class="card-name">' + (card.name || '') + '</span>' +
@@ -1211,18 +1231,13 @@
         };
       }
     }
-    return { name: CARD_NAMES.N[0], rarity: 'N', image: CARD_IMAGES.N };
+    return { name: CARD_NAMES.SR[0], rarity: 'SR', image: CARD_IMAGES.SR };
   }
 
   function renderGachaResult(card, userId) {
-    var ownerId = card.owner_id || card.user_id || userId;
     return '<div class="result-details">' +
-      '<div class="card-rarity rarity-' + card.rarity + '" style="width:50px;height:50px;font-size:16px;border-radius:12px;margin-bottom:10px;">' + card.rarity + '</div>' +
       '<div class="result-name">' + card.name + '</div>' +
-      '<div class="result-rarity rarity-' + card.rarity + '" style="padding:4px 12px;border-radius:8px;">' + card.rarity + ' 稀有</div>' +
-      '<div class="card-owner">归属: ' + ownerId + '</div>' +
-      '<div class="card-trade-count">trade_id: ' + (card.trade_id || '保存后生成') + '</div>' +
-      '<div class="card-trade-count">交易: ' + Number(card.trade_count || 0) + '</div>' +
+      '<div class="result-rarity result-stars rarity-' + card.rarity + '" aria-label="' + getStarRating(card.rarity) + '星">' + getStarLabel(card.rarity) + '</div>' +
       '</div>';
   }
 
@@ -1326,15 +1341,28 @@
     slot.querySelector('.gacha-back small').textContent = '抽取中...';
 
     var card = drawCard();
+    if (appState.adminMode) {
+      slot.classList.remove('is-saving');
+      slot.disabled = false;
+      slot.innerHTML = '<div class="gacha-flip-inner">' +
+        '<div class="gacha-face gacha-back"><span>卡牌</span><small>测试卡牌</small></div>' +
+        '<div class="gacha-face gacha-front">' + renderGachaResult(card, userId) + '</div>' +
+        '</div>';
+      requestAnimationFrame(function() {
+        slot.classList.add('revealed');
+      });
+      renderGachaStatus(DAILY_GACHA_LIMIT, slot);
+      showToast('测试抽卡完成，未计入仓库');
+      appState.isDrawing = false;
+      return;
+    }
+
     AssetLayer.createCards(userId, [card]).then(function(res) {
       var savedCard = res.data && res.data.length ? res.data[0] : card;
-      var nextRemaining = DAILY_GACHA_LIMIT;
-      if (!appState.adminMode) {
-        var used = setTodayGachaUsed(userId, getTodayGachaUsed(userId) + 1);
-        nextRemaining = DAILY_GACHA_LIMIT - used;
-      }
+      var used = setTodayGachaUsed(userId, getTodayGachaUsed(userId) + 1);
+      var nextRemaining = DAILY_GACHA_LIMIT - used;
       slot.classList.remove('is-saving');
-      slot.disabled = !appState.adminMode;
+      slot.disabled = true;
       slot.innerHTML = '<div class="gacha-flip-inner">' +
         '<div class="gacha-face gacha-back"><span>卡牌</span><small>已翻开</small></div>' +
         '<div class="gacha-face gacha-front">' + renderGachaResult(savedCard, userId) + '</div>' +
@@ -1343,11 +1371,9 @@
         slot.classList.add('revealed');
       });
       renderGachaStatus(nextRemaining, slot);
-      if (!appState.adminMode) {
-        UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
-          console.warn('同步抽卡次数失败:', err);
-        });
-      }
+      UserCore.setGachaRemaining(userId, nextRemaining).catch(function(err) {
+        console.warn('同步抽卡次数失败:', err);
+      });
       showToast('已获得 1 张卡牌');
       updateHome();
       appState.isDrawing = false;
@@ -1416,7 +1442,7 @@
           container.innerHTML = '<div class="empty-state">还没有收藏的卡牌</div>';
           return;
         }
-        var rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
+        var rarityOrder = { UR: 0, XR: 1, SSR: 2, SR: 3, R: 4, N: 4 };
         favoriteCards.slice().sort(function(a, b) {
           return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
         }).forEach(function(card) {
@@ -1473,7 +1499,7 @@
         container.innerHTML = '<div class="empty-state">仓库还没有卡牌，去抽卡吧！</div>';
         return;
       }
-      var rarityOrder = { UR: 0, SSR: 1, SR: 2, R: 3, N: 4 };
+      var rarityOrder = { UR: 0, XR: 1, SSR: 2, SR: 3, R: 4, N: 4 };
       res.data.slice().sort(function(a, b) {
         return (rarityOrder[a.rarity] || 5) - (rarityOrder[b.rarity] || 5);
       }).forEach(function(card) {

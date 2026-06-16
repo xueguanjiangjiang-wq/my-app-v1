@@ -44,7 +44,8 @@
   --n: #86868b;
   --r: #30d158;
   --sr: #0a84ff;
-  --ssr: #ff9f0a;
+  --ssr: #bf5af2;
+  --xr: #ff9f0a;
   --ur: #ff375f;
   --radius: 16px;
 }
@@ -596,6 +597,11 @@ body.is-login-page .bottom-nav {
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 15px; font-weight: 800; flex-shrink: 0;
 }
+.card-stars {
+  letter-spacing: -1px;
+  line-height: 1;
+  text-align: center;
+}
 .card-asset-image {
   width: 48px;
   height: 48px;
@@ -710,6 +716,7 @@ body.is-login-page .bottom-nav {
 .rarity-R { background: var(--r); }
 .rarity-SR { background: var(--sr); }
 .rarity-SSR { background: var(--ssr); }
+.rarity-XR { background: var(--xr); }
 .rarity-UR { background: var(--ur); }
 
 /* 好友列表 */
@@ -850,9 +857,12 @@ body.is-login-page .bottom-nav {
   color: rgba(56,64,76,0.58);
 }
 .gacha-front {
-  background: var(--card);
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255,255,255,0.96), rgba(255,255,255,0.42) 30%, transparent 58%),
+    linear-gradient(160deg, rgba(255,255,255,0.96), rgba(244,248,255,0.74));
   transform: rotateY(180deg);
   padding: 10px;
+  border: 1px solid rgba(255,255,255,0.8);
 }
 .gacha-front .card-asset-image-large {
   width: 48px;
@@ -861,17 +871,40 @@ body.is-login-page .bottom-nav {
 .gacha-front .card-rarity {
   width: 38px !important;
   height: 38px !important;
-  font-size: 13px !important;
+  font-size: 11px !important;
   margin-bottom: 4px !important;
 }
 .gacha-front .result-name {
-  font-size: 14px;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.15;
+  writing-mode: horizontal-tb;
 }
-.gacha-front .result-rarity,
-.gacha-front .card-owner,
-.gacha-front .card-trade-count {
-  font-size: 10px;
-  word-break: break-all;
+.gacha-front .result-rarity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.34);
+}
+.gacha-front .result-stars {
+  letter-spacing: -1px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.gacha-front .result-details {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px 8px;
 }
 .placeholder { color: var(--subtext); font-size: 16px; }
 

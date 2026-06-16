@@ -45,6 +45,7 @@
     currentPage: 'login'
   };
   var messagesRealtimeChannel = null;
+  var friendsRealtimeChannel = null;
   var swipeBackState = null;
   var lastBackTouchTime = 0;
   var Router = null;
@@ -631,13 +632,42 @@
 
   var SocialLayer = {
     listFriends: function(userId) {
-      return sb(function() { return supabase.from('friends').select('*').eq('user_id', userId); });
+      return sb(function() { return supabase.from('friends').select('*').eq('user_id', userId).order('created_at', { ascending: false }); });
     },
     addFriend: function(userId, friendId) {
-      return sb(function() { return supabase.from('friends').insert({ user_id: userId, friend_id: friendId }); });
+      return sb(function() {
+        return supabase
+          .from('friends')
+          .select('user_id,friend_id')
+          .or('and(user_id.eq.' + userId + ',friend_id.eq.' + friendId + '),and(user_id.eq.' + friendId + ',friend_id.eq.' + userId + ')');
+      }).then(function(res) {
+        var rows = res.data || [];
+        var hasForward = false;
+        var hasReverse = false;
+        rows.forEach(function(row) {
+          if (row.user_id === userId && row.friend_id === friendId) hasForward = true;
+          if (row.user_id === friendId && row.friend_id === userId) hasReverse = true;
+        });
+        if (hasForward && hasReverse) return { alreadyExists: true };
+        var insertRows = [];
+        if (!hasForward) insertRows.push({ user_id: userId, friend_id: friendId });
+        if (!hasReverse) insertRows.push({ user_id: friendId, friend_id: userId });
+        return sb(function() {
+          return supabase
+            .from('friends')
+            .upsert(insertRows, { onConflict: 'user_id,friend_id', ignoreDuplicates: true });
+        }).then(function() {
+          return { alreadyExists: rows.length > 0 };
+        });
+      });
     },
     removeFriend: function(userId, friendId) {
-      return sb(function() { return supabase.from('friends').delete().match({ user_id: userId, friend_id: friendId }); });
+      return sb(function() {
+        return supabase
+          .from('friends')
+          .delete()
+          .or('and(user_id.eq.' + userId + ',friend_id.eq.' + friendId + '),and(user_id.eq.' + friendId + ',friend_id.eq.' + userId + ')');
+      });
     },
     listMessages: function() {
       return sb(function() {
@@ -882,6 +912,7 @@
     setCurrentUser(user);
     showAppPage('home');
     subscribeMessagesRealtime();
+    subscribeFriendsRealtime();
     updateHome();
     showToast(message);
   }
@@ -1081,10 +1112,11 @@
         showToast('该用户不存在');
         return;
       }
-      SocialLayer.addFriend(userId, friendId).then(function() {
-        showToast('已添加好友: ' + friendUser.name);
+      SocialLayer.addFriend(userId, friendId).then(function(result) {
+        showToast(result && result.alreadyExists ? '已是好友了' : '已添加好友: ' + friendUser.name);
         input.value = '';
         loadFriends();
+        updateHome();
       }).catch(function(err) {
         if (err.message && (err.message.indexOf('Unique') !== -1 || err.message.indexOf('duplicate') !== -1)) showToast('已是好友了');
         else {
@@ -1120,6 +1152,7 @@
             SocialLayer.removeFriend(userId, friend.friend_id).then(function() {
               showToast('已删除好友');
               loadFriends();
+              updateHome();
             }).catch(function(err) {
               console.error('删除好友失败:', err);
               showToast('删除失败');
@@ -1494,6 +1527,10 @@
     return !!(Router && Router.current === 'message');
   }
 
+  function isFriendsPageActive() {
+    return !!(Router && Router.current === 'friends');
+  }
+
   function subscribeMessagesRealtime() {
     if (!supabase || messagesRealtimeChannel) return;
     if (typeof supabase.channel !== 'function') return;
@@ -1509,6 +1546,39 @@
       .subscribe(function(status) {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('messages realtime subscription status:', status);
+        }
+      });
+  }
+
+  function isFriendChangeForCurrentUser(payload) {
+    var userId = appState.user && appState.user.id;
+    if (!userId || !payload) return false;
+    var nextRow = payload.new || {};
+    var oldRow = payload.old || {};
+    if (payload.eventType === 'DELETE' && !oldRow.user_id && !oldRow.friend_id) return true;
+    return nextRow.user_id === userId ||
+      nextRow.friend_id === userId ||
+      oldRow.user_id === userId ||
+      oldRow.friend_id === userId;
+  }
+
+  function subscribeFriendsRealtime() {
+    if (!supabase || friendsRealtimeChannel) return;
+    if (typeof supabase.channel !== 'function') return;
+    friendsRealtimeChannel = supabase
+      .channel('public:friends')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'friends'
+      }, function(payload) {
+        if (!isFriendChangeForCurrentUser(payload)) return;
+        updateHome();
+        if (isFriendsPageActive()) loadFriends();
+      })
+      .subscribe(function(status) {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('friends realtime subscription status:', status);
         }
       });
   }
@@ -1766,6 +1836,7 @@
       bindSwipeBack();
       window.addEventListener('online', function() {
         if (isMessagePageActive()) loadMessages();
+        if (isFriendsPageActive()) loadFriends();
       });
     }, 'bindEvents');
   }

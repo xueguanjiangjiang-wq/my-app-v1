@@ -622,13 +622,15 @@ body.is-login-page .bottom-nav {
   min-width: 0;
 }
 .card-name {
+  display: block;
   font-size: 20px;
   font-weight: 800;
   color: var(--text);
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.24;
+  padding: 1px 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 .card-owner,
 .card-trade-count {
@@ -875,10 +877,15 @@ body.is-login-page .bottom-nav {
   margin-bottom: 4px !important;
 }
 .gacha-front .result-name {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 900;
   color: var(--text);
-  line-height: 1.15;
+  line-height: 1.16;
+  max-width: 100%;
+  padding: 1px 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
   writing-mode: horizontal-tb;
 }
 .gacha-front .result-rarity {
@@ -903,8 +910,8 @@ body.is-login-page .bottom-nav {
   width: 100%;
   height: 100%;
   justify-content: center;
-  gap: 14px;
-  padding: 14px 8px;
+  gap: 10px;
+  padding: 10px 6px;
 }
 .placeholder { color: var(--subtext); font-size: 16px; }
 

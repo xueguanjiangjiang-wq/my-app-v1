@@ -22,7 +22,7 @@
   var supabase = window.supabase && window.supabase.createClient ?
     window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) :
     null;
-  var ADMIN_PASSWORD = '123';
+  var ADMIN_PASSWORD = '222';
   var DAILY_GACHA_LIMIT = 3;
   var SESSION_USER_ID_KEY = 'cardapp_current_user_id';
   var SUPABASE_RETRY_LIMIT = 2;
@@ -1914,4 +1914,3 @@
 
   startAppWhenReady();
 })();
-
